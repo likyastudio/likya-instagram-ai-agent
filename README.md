@@ -4,7 +4,7 @@
 
 ## ✨ Özellikler
 
-- **Yönetim Paneli (`/`):** Tailwind CSS tabanlı modern web arayüzü (PIN şifre korumalı).
+- **Yönetim Paneli (`/`):** `static/dashboard.html` — bağımlılıksız, mobil uyumlu, açık/koyu tema. PIN ile giriş; bağlantı/webhook/AI durum kartları, hareket listesi, kural düzenleyici, kural test aracı.
 - **Canlı Reels / Gönderi Seçici (`/api/media`):** Hesaba yüklenen son videoları otomatik olarak Graph API'den çeker ve açılır listede gösterir.
 - **Anti-Spam Çoklu Varyasyon Desteği:** Yorum yanıtlarında `|` ile ayrılmış birden fazla cümle arasından rastgele seçim yapar.
 - **Videoya Özel veya Genel Kurallar (`rules.json`):** Belirli bir `media_id` veya tüm gönderiler (`all`) için anahtar kelime tetikleyicileri.
@@ -30,12 +30,15 @@
 
 ## 🚀 Geliştirme & Tasarım Özelleştirme (Claude Code İpuçları)
 
-Web yönetim paneli arayüzü `app.py` içerisindeki `dashboard_page()` fonksiyonunda (`@app.get("/")`) yer almaktadır. Ayrı bir `templates/index.html` veya React/Next.js yapısına taşımak isterseniz şu API uç noktalarını kullanabilirsiniz:
+Panel `static/dashboard.html` dosyasıdır; sunucu sayfaya veri gömmez. Tüm `/api/*` uç noktaları `X-Admin-Pin` başlığı ister (10 hatalı denemede 10 dk blok):
 
+- `GET /api/status` → Bağlantı, webhook, AI ve güvenlik durumu (gizli değer döndürmez).
 - `GET /api/media` → Son Instagram gönderilerini ve Reels videolarını döndürür.
 - `GET /api/rules` → Mevcut otomasyon kurallarını listeler.
 - `POST /api/rules` → Kuralları günceller (`X-Admin-Pin` başlığı ile).
+- `POST /api/test-match` → Örnek yorumun hangi kurala düştüğünü gösterir (Instagram'a bir şey göndermez).
 - `GET /api/logs` → Son gelen yorum ve DM hareket kayıtlarını döndürür.
+- `GET /api/prompt` → Gemini AI sistem talimatını döndürür.
 - `POST /api/prompt` → Gemini AI sistem talimatını günceller (`X-Admin-Pin` başlığı ile).
 - `GET / POST /webhook` → Meta Developer Webhook doğrulama ve olay dinleme uç noktası.
 
@@ -53,6 +56,10 @@ uvicorn app:app --reload --port 8080
 ```bash
 pytest tests/ -v
 ```
+
+> Not: Panelden yapılan kural/talimat değişiklikleri Cloud Run'ın geçici diskine yazılır; yeni dağıtımda depodaki `rules.json` ve `system-prompt.txt` geri gelir. Kalıcı değişiklikleri depoya da işleyin.
+
+> Güvenlik: Canlıda `ADMIN_PIN`, `IG_APP_SECRET` ve `IG_VERIFY_TOKEN` mutlaka varsayılan dışı değerlerle `.env.yaml` içinde tanımlanmalı.
 
 ### Google Cloud Run'a Yükleme (Deploy)
 

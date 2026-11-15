@@ -9,6 +9,20 @@ from app import app, valid_signature, find_matching_rule
 
 
 client = TestClient(app)
+PIN = {"X-Admin-Pin": ig_module.ADMIN_PIN}
+
+
+@pytest.fixture(autouse=True)
+def isolated_files(tmp_path, monkeypatch):
+    """Testler depodaki gerçek rules.json / system-prompt.txt dosyalarının üzerine yazmasın."""
+    rules_copy = tmp_path / "rules.json"
+    rules_copy.write_text(ig_module.RULES_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+    prompt_copy = tmp_path / "system-prompt.txt"
+    prompt_copy.write_text(ig_module.PROMPT_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(ig_module, "RULES_FILE", rules_copy)
+    monkeypatch.setattr(ig_module, "PROMPT_FILE", prompt_copy)
+    ig_module.PIN_FAILURES.clear()
+    yield
 
 
 def test_dashboard_endpoint():
@@ -51,7 +65,7 @@ def test_signature_validation():
 
 def test_rules_api():
     # GET rules
-    res = client.get("/api/rules")
+    res = client.get("/api/rules", headers=PIN)
     assert res.status_code == 200
     rules = res.json()
     assert isinstance(rules, list)
@@ -68,12 +82,17 @@ def test_rules_api():
             "is_active": True,
         }
     ]
-    res_post = client.post("/api/rules", json=new_rules)
+    res_post = client.post("/api/rules", json=new_rules, headers=PIN)
     assert res_post.status_code == 200
     assert res_post.json()["count"] == 1
 
 
 def test_find_matching_rule():
+    client.post("/api/rules", headers=PIN, json=[{
+        "id": "test_rule_1", "name": "Özel Test Kuralı", "media_id": "all", "keywords": "katalog, test",
+        "public_reply": "Katalog DM'de!", "dm_message": "İşte kataloğunuz: https://likyastudios.com/katalog",
+        "is_active": True,
+    }])
     matched = find_matching_rule("bana katalog atabilir misiniz?")
     assert matched is not None
     assert matched["name"] == "Özel Test Kuralı"
@@ -159,3 +178,85 @@ def test_webhook_receive_instagram_comment(monkeypatch):
     assert res.json() == {"status": "ok"}
     assert len(handled_comments) == 1
     assert handled_comments[0] == ("comment_999", "Çok güzel bir ürün!", "ayse_yilmaz", "media_post_111")
+
+
+# ---------------------------------------------------------------- Yönetim API güvenliği
+
+@pytest.mark.parametrize("method,path", [
+    ("get", "/api/rules"), ("get", "/api/logs"), ("get", "/api/media"), ("get", "/api/status"),
+    ("get", "/api/prompt"), ("post", "/api/rules"), ("post", "/api/prompt"), ("post", "/api/test-match"),
+])
+def test_admin_api_requires_pin(method, path):
+    kwargs = {"json": {}} if method == "post" else {}
+    assert getattr(client, method)(path, **kwargs).status_code == 401
+    bad = getattr(client, method)(path, headers={"X-Admin-Pin": "yanlis"}, **kwargs)
+    assert bad.status_code == 401
+
+
+def test_rules_cannot_be_overwritten_without_pin():
+    before = client.get("/api/rules", headers=PIN).json()
+    res = client.post("/api/rules", json=[])
+    assert res.status_code == 401
+    assert client.get("/api/rules", headers=PIN).json() == before
+
+
+def test_pin_bruteforce_is_rate_limited():
+    for _ in range(ig_module.PIN_FAIL_LIMIT):
+        assert client.get("/api/status", headers={"X-Admin-Pin": "x"}).status_code == 401
+    assert client.get("/api/status", headers={"X-Admin-Pin": "x"}).status_code == 429
+    assert client.get("/api/status", headers=PIN).status_code == 429
+
+
+def test_dashboard_does_not_embed_private_data():
+    ig_module.RECENT_LOGS.append({"type": "DM", "user": "gizli_kullanici", "input": "<img src=x onerror=alert(1)>",
+                                  "reply": "x", "matched_rule": "x"})
+    try:
+        html = client.get("/").text
+        assert "gizli_kullanici" not in html
+        assert "onerror=alert(1)" not in html
+        assert "likya2026" not in html
+        assert "cdn.tailwindcss.com" not in html
+    finally:
+        ig_module.RECENT_LOGS.pop()
+
+
+def test_status_reports_config_without_secrets():
+    data = client.get("/api/status", headers=PIN).json()
+    assert set(data) >= {"instagram", "webhook", "ai", "security", "rules", "logs"}
+    flat = json.dumps(data)
+    for secret in (ig_module.IG_PAGE_ACCESS_TOKEN, ig_module.GEMINI_API_KEY, ig_module.IG_APP_SECRET, ig_module.ADMIN_PIN):
+        if secret:
+            assert secret not in flat
+
+
+def test_test_match_has_no_side_effects(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ig_module, "reply_to_comment", lambda *a: calls.append(a))
+    res = client.post("/api/test-match", headers=PIN, json={"text": "pdf linki lütfen", "media_id": ""})
+    assert res.status_code == 200
+    assert res.json()["matched"] is True
+    assert calls == []
+    miss = client.post("/api/test-match", headers=PIN, json={"text": "merhaba", "media_id": ""}).json()
+    assert miss["matched"] is False
+
+
+def test_rules_payload_is_validated():
+    assert client.post("/api/rules", headers=PIN, json={"rules": "bozuk"}).status_code == 422
+    res = client.post("/api/rules", headers=PIN, json=[{"name": "  Yalın  "}])
+    assert res.status_code == 200
+    saved = client.get("/api/rules", headers=PIN).json()[0]
+    assert saved["name"] == "Yalın" and saved["media_id"] == "all" and saved["keywords"] == "*" and saved["is_active"] is True
+
+
+def test_prompt_roundtrip_and_empty_rejected():
+    assert client.post("/api/prompt", headers=PIN, json={"prompt": "   "}).status_code == 422
+    assert client.post("/api/prompt", headers=PIN, json={"prompt": "Yeni talimat"}).status_code == 200
+    assert client.get("/api/prompt", headers=PIN).json()["prompt"] == "Yeni talimat"
+
+
+def test_webhook_rejected_signature_is_counted():
+    ig_module.IG_APP_SECRET = "test_app_secret_12345"
+    before = ig_module.STATS["webhook_rejected"]
+    res = client.post("/webhook", content=b"{}", headers={"X-Hub-Signature-256": "sha256=bad"})
+    assert res.status_code == 401
+    assert ig_module.STATS["webhook_rejected"] == before + 1

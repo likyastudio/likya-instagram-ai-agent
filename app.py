@@ -1,12 +1,16 @@
 """
-Likya Studios — Instagram Otomasyon & AI Yönetim Sistemi (Pro Sürüm)
-====================================================================
-Özellikler:
-1. Web Yönetim Paneli (PIN korumalı — ADMIN_PIN ortam değişkeni; panel: static/dashboard.html)
-2. Instagram Reels/Gönderi Seçici (Canlı Meta API'den videoları otomatik çeker)
-3. Anti-Spam Yorum Varyasyonları (| ile ayrılmış çoklu yanıtlar arasından rastgele seçim)
-4. Kural Bazlı Otomatik Yorum Yanıtlama + Özel DM (Filigransız / ManyChat'siz)
-5. Google Gemini AI Asistanı (Kural eşleşmeyen durumlarda ve DM sohbetlerinde)
+Likya Studios — Instagram Otomasyon & Yönetim Sistemi (v4)
+==========================================================
+Akış:
+1. Bir gönderiye yorum gelir (Meta webhook).
+2. Yoruma her zaman panelde belirlenen *standart yanıt* yazılır.
+3. Yorum yapan kişiye DM gider: DM metni + o videonun herkese açık sayfa linki
+   (link.likyastudios.live/<sayfa>). Sayfası olmayan videolarda genel kaynak sayfası.
+4. Doğrudan gelen DM'lere Gemini yanıt verir (anahtar yoksa genel sayfa linki).
+
+Panel (panel.likyastudios.live): Google hesabıyla giriş, gönderiler (Instagram'dan
+otomatik gelir), video sayfası düzenleyici, mesaj ayarları, hareketler.
+Veri: DATA_BUCKET tanımlıysa Google Cloud Storage'da kalıcı (store.py).
 """
 
 from __future__ import annotations
@@ -16,18 +20,22 @@ import hmac
 import json
 import logging
 import os
-import random
+import re
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 
-# Loglama
+import auth
+import public_pages
+from store import DataStore
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("instagram-agent")
 
@@ -40,9 +48,10 @@ for var in ("NO_PROXY", "no_proxy"):
             p.strip() for p in os.environ[var].split(",") if p.strip() not in ("[::1]", "::1")
         )
 
-# Meta & Google Ayarları
+# ---------------------------------------------------------------- Ayarlar (ortam değişkenleri)
 IG_PAGE_ACCESS_TOKEN = os.getenv("IG_PAGE_ACCESS_TOKEN", "")
 IG_ACCOUNT_ID = os.getenv("IG_ACCOUNT_ID", "17841425616032125")
+IG_USERNAME = os.getenv("IG_USERNAME", "likyastudios").lower()
 IG_APP_SECRET = os.getenv("IG_APP_SECRET", "")
 IG_VERIFY_TOKEN = os.getenv("IG_VERIFY_TOKEN", "likya_verify_token_2026_secure")
 IG_GRAPH_VERSION = os.getenv("IG_GRAPH_VERSION", "v21.0")
@@ -50,53 +59,88 @@ IG_GRAPH_VERSION = os.getenv("IG_GRAPH_VERSION", "v21.0")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
-# Yönetim Paneli Şifresi
+# Giriş: Google (önerilen) veya PIN (Google ayarlanmamışsa yedek)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
+SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 ADMIN_PIN = os.getenv("ADMIN_PIN", "likya2026")
 
-RULES_FILE = Path(__file__).parent / "rules.json"
-PROMPT_FILE = Path(__file__).parent / "system-prompt.txt"
-DASHBOARD_FILE = Path(__file__).parent / "static" / "dashboard.html"
+# Herkese açık sayfaların adresi, ör. https://link.likyastudios.live (boşsa servis adresi + /p)
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+DATA_BUCKET = os.getenv("DATA_BUCKET", "")
 
 DEFAULT_ADMIN_PIN = "likya2026"
 DEFAULT_VERIFY_TOKEN = "likya_verify_token_2026_secure"
+
+BASE_DIR = Path(__file__).parent
+PROMPT_FILE = BASE_DIR / "system-prompt.txt"
+DASHBOARD_FILE = BASE_DIR / "static" / "dashboard.html"
+SEED_FILE = BASE_DIR / "seed-data.json"
+LOCAL_DATA_FILE = BASE_DIR / "data.local.json"
+
+RESERVED_SLUGS = {"p", "api", "auth", "webhook", "health", "static", "docs", "openapi.json", "favicon.ico", "robots.txt"}
+GENERAL_KEY = "__general__"
 
 # Bellek içi kuyruklar
 DM_HISTORY: dict[str, deque] = defaultdict(lambda: deque(maxlen=15))
 SEEN_EVENT_IDS: deque = deque(maxlen=1000)
 RECENT_LOGS: deque = deque(maxlen=50)
 
-# Panelde gösterilen çalışma durumu (bellekte; sunucu yeniden başlayınca sıfırlanır)
 STARTED_AT = datetime.now(timezone.utc)
 STATS: dict = {
-    "webhook_events": 0,          # imzası geçerli webhook istekleri
-    "webhook_rejected": 0,        # imzası geçersiz olduğu için reddedilenler
-    "last_webhook_at": None,      # son geçerli webhook zamanı (ISO)
-    "last_rejected_at": None,
-    "media_ok": None,             # son medya listesi çekimi başarılı mı
-    "media_error": "",
-    "media_checked_at": None,
+    "webhook_events": 0, "webhook_rejected": 0, "last_webhook_at": None, "last_rejected_at": None,
+    "media_ok": None, "media_error": "", "media_checked_at": None,
 }
+RUNTIME: dict = {"service_base": ""}   # gelen isteklerden öğrenilen servis adresi
 
-# PIN deneme sınırı: aynı IP'den 10 dakikada 10 hatalı denemeden sonra geçici blok
 PIN_FAIL_WINDOW = 600
 PIN_FAIL_LIMIT = 10
 PIN_FAILURES: dict[str, deque] = defaultdict(lambda: deque(maxlen=PIN_FAIL_LIMIT))
 
-app = FastAPI(title="Likya Studios Instagram Automation Pro", version="3.1.0")
+
+def _load_seed() -> dict:
+    try:
+        seed = json.loads(SEED_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        seed = {}
+    seed.setdefault("settings", {})
+    seed.setdefault("pages", {})
+    return seed
+
+
+STORE = DataStore(DATA_BUCKET, "instagram-agent/data.json", LOCAL_DATA_FILE, _load_seed())
+
+app = FastAPI(title="Likya Studios Instagram Automation", version="4.0.0")
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-# ---------------------------------------------------------------- Yardımcılar & Kurallar
+@app.middleware("http")
+async def remember_service_base(request: Request, call_next):
+    # DM'deki linkler için, PUBLIC_BASE_URL tanımlı değilken servisin kendi adresini kullan
+    host = request.headers.get("host", "")
+    if host and not RUNTIME["service_base"]:
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        RUNTIME["service_base"] = f"{scheme}://{host}"
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------- Giriş / yetki
+
+def auth_mode() -> str:
+    return "google" if (GOOGLE_CLIENT_ID and ADMIN_EMAILS and SESSION_SECRET) else "pin"
+
+
+def _check_same_origin(request: Request) -> None:
+    """Çerezle yapılan değiştirme isteklerinde başka siteden gelen istekleri reddeder (CSRF)."""
+    origin = request.headers.get("origin")
+    if origin and urlparse(origin).netloc != request.headers.get("host", ""):
+        raise HTTPException(status_code=403, detail="Bu istek başka bir siteden geldi.")
+
 
 def verify_pin(request: Request) -> None:
-    """Yönetim API'lerinde X-Admin-Pin başlığını zorunlu olarak doğrular.
-
-    Eski sürüm başlık boş gönderildiğinde isteği kabul ediyordu; bu, şifresiz herkesin
-    kuralları ve AI talimatını değiştirebilmesi demekti. Artık PIN her zaman gerekir.
-    """
     if not ADMIN_PIN:
         return
     client_ip = request.client.host if request.client else "unknown"
@@ -106,7 +150,6 @@ def verify_pin(request: Request) -> None:
         fails.popleft()
     if len(fails) >= PIN_FAIL_LIMIT:
         raise HTTPException(status_code=429, detail="Çok fazla hatalı deneme. Lütfen birkaç dakika sonra tekrar deneyin.")
-
     pin = request.headers.get("X-Admin-Pin", "")
     if not hmac.compare_digest(pin.encode(), ADMIN_PIN.encode()):
         fails.append(now)
@@ -114,352 +157,217 @@ def verify_pin(request: Request) -> None:
     fails.clear()
 
 
-def load_rules() -> list[dict]:
-    """rules.json dosyasından kuralları okur."""
-    if RULES_FILE.exists():
-        try:
-            with open(RULES_FILE, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"rules.json okuma hatası: {e}")
-
-    default_rules = [
-        {
-            "id": "rule_stirling_pdf",
-            "name": "Stirling PDF İndirme Linki",
-            "media_id": "17917802667556092",
-            "keywords": "pdf, stirling, indir, link",
-            "public_reply": "Harika! İstediğiniz indirme bağlantısını hemen DM kutunuza ilettik ✨ | Selamlar! Stirling PDF linkini DM'den gönderdik 🚀 | DM kutunuzu kontrol edebilirsiniz, indirme bağlantısını ilettik 📩 | İstediğiniz bağlantıyı özel mesaj olarak gönderdik, keyifli çalışmalar! 💛",
-            "dm_message": "Selam! Gönderimizde bahsettiğimiz Stirling PDF bağlantısı burada 👇\n\n📄 İndirme Bağlantısı: https://www.stirling.com\n📘 GitHub: https://github.com/Stirling-Tools/Stirling-PDF\n\nBireysel kullanım tamamen ücretsizdir. Keyifli çalışmalar dileriz! 💛",
-            "is_active": True,
-        },
-        {
-            "id": "rule_google_tools",
-            "name": "Google Ücretsiz 7 Yapay Zeka Aracı",
-            "media_id": "18154159846505090",
-            "keywords": "google, araç, arac, liste, link",
-            "public_reply": "Süper! 7 ücretsiz Google yapay zeka aracının listesini ve linklerini DM'den gönderdik 🧠✨ | Harika! Tüm araçların bağlantılarını DM kutunuza ilettik 🚀 | DM kutunuzu kontrol edin, Google AI listesini hemen paylaştık 📩",
-            "dm_message": "Merhaba! Videomuzda bahsettiğimiz 7 ücretsiz Google yapay zeka aracının listesi ve bağlantıları:\n\n1️⃣ Gemini Notebook: https://notebooklm.google.com\n2️⃣ Google AI Studio: https://aistudio.google.com\n3️⃣ Stitch: https://labs.google\n4️⃣ Antigravity: https://idx.dev\n5️⃣ Lyria & Gemini: https://gemini.google.com\n6️⃣ Flow (Veo): https://labs.google/fx\n7️⃣ Öğrenci İndirimi: https://gemini.google.com/students\n\nFaydalı olması dileğiyle! 🚀",
-            "is_active": True,
-        },
-        {
-            "id": "rule_5_ai_tools",
-            "name": "Ücretsiz 5 Yapay Zeka Aracı",
-            "media_id": "18113791415261080",
-            "keywords": "araç, arac, 1, 2, 3, 4, 5, link",
-            "public_reply": "Harika seçim! 5 ücretsiz yapay zeka aracının tüm linklerini DM kutunuza ilettik 🧠✨ | Selamlar! Araçların indirme bağlantılarını DM'den gönderdik 🚀 | Bağlantıları özel mesaj olarak ilettik, DM kutunuzu kontrol edebilirsiniz 📩",
-            "dm_message": "Selam! Videomuzdaki 5 ücretsiz yapay zeka aracının doğrudan bağlantıları 👇\n\n1️⃣ Gemini Notebook: https://notebooklm.google.com\n2️⃣ Google AI Studio: https://aistudio.google.com\n3️⃣ Ollama: https://ollama.com\n4️⃣ Whisper: https://github.com/openai/whisper\n5️⃣ Upscayl: https://upscayl.org\n\nKeyifli denemeler! ✨",
-            "is_active": True,
-        },
-        {
-            "id": "rule_localsend",
-            "name": "LocalSend Dosya Paylaşım Aracı",
-            "media_id": "18106100525456225",
-            "keywords": "github, localsend, airdrop, link, indir",
-            "public_reply": "Harika bir araç! LocalSend indirme ve GitHub bağlantısını DM kutunuza ilettik 📱💻 | Selamlar! LocalSend linkini hemen DM'den paylaştık 🚀 | DM kutunuzu kontrol edebilirsiniz, indirme bağlantısını gönderdik ✨",
-            "dm_message": "Selam! Videomuzda bahsettiğimiz açık kaynak dosya aktarım aracı LocalSend linkleri:\n\n🔗 Resmi Web Sitesi & İndir: https://localsend.org\n⭐ GitHub Sayfası: https://github.com/localsend/localsend\n\nAynı Wi-Fi ağında internetsiz ve şifreli çalışır. Keyifle kullanın! ✨",
-            "is_active": True,
-        },
-        {
-            "id": "rule_genel_destek",
-            "name": "Genel Anahtar Kelime Yakalayıcı (Tüm Videolar)",
-            "media_id": "all",
-            "keywords": "pdf, google, github, fiyat, ucret, bilgi",
-            "public_reply": "Harika! İstediğiniz bağlantıyı ve detayları hemen DM kutunuza ilettik ✨ | Selamlar! İlgili linkleri DM üzerinden sizinle paylaştık 🚀 | DM kutunuzu kontrol edebilirsiniz, detayları gönderdik 📩",
-            "dm_message": "Merhaba! Likya Studios içeriklerine gösterdiğiniz ilgi için teşekkür ederiz 🤝\n\nEn popüler açık kaynak & yapay zeka araç linklerimiz:\n📄 Stirling PDF: https://www.stirling.com\n📱 LocalSend: https://localsend.org\n🧠 Google AI Studio: https://aistudio.google.com\n🌐 Web Sitemiz: https://likyastudios.com",
-            "is_active": True,
-        },
-    ]
-    save_rules(default_rules)
-    return default_rules
+def require_admin(request: Request) -> str:
+    """Yönetim API'lerine erişimi doğrular; giriş yapan kişinin kimliğini döndürür."""
+    if auth_mode() == "google":
+        email = auth.read_session(request.cookies.get(auth.SESSION_COOKIE, ""), SESSION_SECRET, ADMIN_EMAILS)
+        if not email:
+            raise HTTPException(status_code=401, detail="Lütfen Google hesabınızla giriş yapın.")
+        if request.method not in ("GET", "HEAD"):
+            _check_same_origin(request)
+        return email
+    verify_pin(request)
+    return "pin"
 
 
-def save_rules(rules: list[dict]) -> None:
-    """Kuralları rules.json dosyasına kaydeder."""
-    try:
-        with open(RULES_FILE, "w", encoding="utf-8") as f:
-            json.dump(rules, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"rules.json kaydetme hatası: {e}")
+# ---------------------------------------------------------------- Veri yardımcıları
+
+TR_MAP = str.maketrans("çğıöşüÇĞİÖŞÜâîûÂÎÛ", "cgiosuCGIOSUaiuAIU")
 
 
-def load_system_prompt() -> str:
+def slugify(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").translate(TR_MAP).lower()).strip("-")
+    return s[:60].strip("-")
+
+
+def public_base() -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    return (RUNTIME["service_base"] or "") + "/p"
+
+
+def page_url(page: dict | None) -> str:
+    """DM'de gönderilecek link: harici sayfa (ör. likyastudios.live/prompt/...) > video sayfası > genel sayfa."""
+    if page and page.get("external_url"):
+        return page["external_url"]
+    base = public_base()
+    return f"{base}/{page['slug']}" if page and page.get("slug") else base
+
+
+def render_dm(template: str, link: str, title: str = "") -> str:
+    text = (template or "").strip() or "Merhaba! İstediğin bağlantılar bu sayfada:\n{link}"
+    if "{link}" not in text:
+        text += "\n{link}"
+    return text.replace("{link}", link).replace("{title}", title)[:1000]
+
+
+def load_file_prompt() -> str:
     if PROMPT_FILE.exists():
         return PROMPT_FILE.read_text(encoding="utf-8").strip()
-    return (
-        "Sen Likya Studios (@likyastudios) Instagram hesabının yapay zeka asistanısın. "
-        "Samimi, enerjik, profesyonel ve Türkçe yanıtlar ver. "
-        "Gönderi yorumlarına maksimum 1-2 cümlelik sıcak yanıt ver ve detayların DM'den iletildiğini söyle."
-    )
+    return "Sen Likya Studios (@likyastudios) Instagram asistanısın. Samimi, enerjik ve Türkçe yanıt ver."
 
 
-def pick_variation(reply_template: str, username: str = "") -> str:
-    """'|' ile ayrılmış yanıt şablonları arasından rastgele birini seçer ve @kullanici_adi ekler."""
-    if not reply_template:
-        return "Harika! Detayları DM kutunuza ilettik ✨"
-    options = [opt.strip() for opt in reply_template.split("|") if opt.strip()]
-    chosen = random.choice(options) if options else reply_template.strip()
-    if username and "{user}" in chosen:
-        chosen = chosen.replace("{user}", f"@{username}")
-    return chosen
+# ---------------------------------------------------------------- Gemini
 
-
-def find_matching_rule(comment_text: str, media_id: str = "") -> dict | None:
-    """
-    Önce videoya özel (media_id eşleşen) kuralları arar,
-    bulamazsa 'all' (tüm gönderiler) kurallarına bakar.
-    """
-    rules = load_rules()
-    lower_text = comment_text.lower().strip()
-
-    # 1. Aşama: Sadece bu videoya (media_id) özel aktif kurallar
-    if media_id:
-        for rule in rules:
-            if not rule.get("is_active", True):
-                continue
-            if str(rule.get("media_id", "")).strip() == str(media_id).strip():
-                if _matches_keywords(lower_text, rule.get("keywords", "")):
-                    return rule
-
-    # 2. Aşama: Tüm gönderiler ("all") için geçerli aktif kurallar
-    for rule in rules:
-        if not rule.get("is_active", True):
-            continue
-        rule_media = str(rule.get("media_id", "all")).strip()
-        if rule_media in ("all", "", "*"):
-            if _matches_keywords(lower_text, rule.get("keywords", "")):
-                return rule
-
-    return None
-
-
-def _matches_keywords(lower_text: str, keywords_str: str) -> bool:
-    keywords_str = keywords_str.strip()
-    if keywords_str in ("*", "hepsi", "all", ""):
-        return True
-    keywords = [k.strip().lower() for k in keywords_str.split(",") if k.strip()]
-    return any(kw in lower_text for kw in keywords)
-
-
-# ---------------------------------------------------------------- Gemini LLM
-
-async def call_gemini(user_prompt: str, context_type: str = "DM", history: list | None = None) -> str:
-    """Google Gemini modelini çağırır."""
-    if not GEMINI_API_KEY:
-        if context_type == "COMMENT":
-            return "Yorumunuz için çok teşekkürler! Detayları DM'den paylaştık ✨"
-        return "Merhaba! Mesajınız için teşekkürler, ekibimiz en kısa sürede dönüş sağlayacaktır."
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    instruction = f"{load_system_prompt()}\n\n[Şu anki mod: {context_type}]"
-    if context_type == "COMMENT":
-        instruction += "\nKural: Bu bir Instagram gönderi altındaki yorumdur. Maksimum 1-2 cümlelik, samimi ve emojili yanıt ver."
-
+async def call_gemini(user_prompt: str, system_prompt: str, history: list | None = None) -> str:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     contents = []
-    if history and context_type == "DM":
-        for item in history:
-            role = "user" if item["role"] == "user" else "model"
-            contents.append({"role": role, "parts": [{"text": item["content"]}]})
+    for item in history or []:
+        role = "user" if item["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": item["content"]}]})
     contents.append({"role": "user", "parts": [{"text": user_prompt}]})
-
     payload = {
-        "system_instruction": {"parts": [{"text": instruction}]},
+        "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": contents,
         "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300},
     }
-
     async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.post(url, json=payload)
+        r = await client.post(url, json=payload, headers={"x-goog-api-key": GEMINI_API_KEY})
         r.raise_for_status()
         return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 # ---------------------------------------------------------------- Instagram API
 
-async def fetch_instagram_media(limit: int = 15) -> list[dict]:
-    """Hesaptaki son gönderi ve Reels videolarını çeker."""
+MEDIA_CACHE: dict = {"at": 0.0, "items": []}
+MEDIA_TTL = 120
+
+
+async def fetch_instagram_media(limit: int = 30, fresh: bool = False) -> list[dict]:
+    """Hesaptaki son gönderileri (küçük resimleriyle) çeker; 2 dk önbellekte tutar."""
+    if not fresh and MEDIA_CACHE["items"] and time.monotonic() - MEDIA_CACHE["at"] < MEDIA_TTL:
+        return MEDIA_CACHE["items"]
     STATS["media_checked_at"] = _now_iso()
     if not IG_PAGE_ACCESS_TOKEN:
-        STATS["media_ok"] = False
-        STATS["media_error"] = "IG_PAGE_ACCESS_TOKEN tanımlı değil"
+        STATS["media_ok"], STATS["media_error"] = False, "IG_PAGE_ACCESS_TOKEN tanımlı değil"
         return []
-    target_id = IG_ACCOUNT_ID if IG_ACCOUNT_ID else "me"
+    target_id = IG_ACCOUNT_ID or "me"
     url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{target_id}/media"
     params = {
-        "fields": "id,caption,media_type,permalink,timestamp",
+        "fields": "id,caption,media_type,permalink,timestamp,thumbnail_url,media_url",
         "limit": str(limit),
         "access_token": IG_PAGE_ACCESS_TOKEN,
     }
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(url, params=params)
-            if r.status_code == 200:
-                items = r.json().get("data", [])
-                result = []
-                for item in items:
-                    caption = (item.get("caption") or "Başlıksız Gönderi").strip()
-                    first_line = caption.split("\n")[0][:65]
-                    result.append({
-                        "id": item.get("id"),
-                        "title": first_line,
-                        "media_type": item.get("media_type", "VIDEO"),
-                        "permalink": item.get("permalink", ""),
-                        "timestamp": item.get("timestamp", ""),
-                    })
-                STATS["media_ok"] = True
-                STATS["media_error"] = ""
-                return result
-            # Meta hata mesajını (token süresi doldu vb.) panelde göstermek için sakla
-            try:
-                meta_msg = r.json().get("error", {}).get("message", "")
-            except Exception:
-                meta_msg = ""
-            STATS["media_ok"] = False
-            STATS["media_error"] = f"Meta API {r.status_code}: {meta_msg}"[:300]
-            logger.error(f"Medya listesi çekme hatası ({r.status_code}): {r.text[:300]}")
+        if r.status_code == 200:
+            result = []
+            for item in r.json().get("data", []):
+                caption = (item.get("caption") or "").strip()
+                mtype = item.get("media_type", "VIDEO")
+                result.append({
+                    "id": str(item.get("id")),
+                    "title": (caption.split("\n")[0][:90] or "Başlıksız gönderi"),
+                    "caption": caption[:600],
+                    "media_type": mtype,
+                    "permalink": item.get("permalink", ""),
+                    "timestamp": item.get("timestamp", ""),
+                    "thumb": item.get("thumbnail_url") if mtype == "VIDEO" else item.get("media_url"),
+                })
+            STATS["media_ok"], STATS["media_error"] = True, ""
+            MEDIA_CACHE.update(at=time.monotonic(), items=result)
+            return result
+        try:
+            meta_msg = r.json().get("error", {}).get("message", "")
+        except Exception:
+            meta_msg = ""
+        STATS["media_ok"], STATS["media_error"] = False, f"Meta API {r.status_code}: {meta_msg}"[:300]
+        logger.error(f"Medya listesi çekme hatası ({r.status_code}): {r.text[:300]}")
     except Exception as e:
-        STATS["media_ok"] = False
-        STATS["media_error"] = f"Bağlantı hatası: {e}"[:300]
+        STATS["media_ok"], STATS["media_error"] = False, f"Bağlantı hatası: {e}"[:300]
         logger.error(f"Medya listesi çekme hatası: {e}")
-    return []
+    return MEDIA_CACHE["items"]
+
+
+async def _graph_post(url: str, payload: dict, label: str) -> bool:
+    if not IG_PAGE_ACCESS_TOKEN:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(url, json=payload, headers={"Authorization": f"Bearer {IG_PAGE_ACCESS_TOKEN}"})
+        if r.status_code >= 400:
+            logger.error(f"{label} hatası ({r.status_code}): {r.text}")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"{label} istek hatası: {e}")
+        return False
 
 
 async def send_instagram_dm(recipient_id: str, text: str) -> bool:
-    if not IG_PAGE_ACCESS_TOKEN:
-        return False
-    target_id = IG_ACCOUNT_ID if IG_ACCOUNT_ID else "me"
-    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{target_id}/messages"
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(
-                url,
-                json={"recipient": {"id": recipient_id}, "message": {"text": text[:1000]}},
-                headers={"Authorization": f"Bearer {IG_PAGE_ACCESS_TOKEN}"},
-            )
-            if r.status_code >= 400:
-                logger.error(f"DM Gönderme Hatası ({r.status_code}): {r.text}")
-                return False
-            return True
-    except Exception as e:
-        logger.error(f"DM İstek Hatası: {e}")
-        return False
+    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{IG_ACCOUNT_ID or 'me'}/messages"
+    return await _graph_post(url, {"recipient": {"id": recipient_id}, "message": {"text": text[:1000]}}, "DM gönderme")
 
 
 async def reply_to_comment(comment_id: str, text: str) -> bool:
-    if not IG_PAGE_ACCESS_TOKEN:
-        return False
     url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{comment_id}/replies"
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(
-                url,
-                json={"message": text[:300]},
-                headers={"Authorization": f"Bearer {IG_PAGE_ACCESS_TOKEN}"},
-            )
-            if r.status_code >= 400:
-                logger.error(f"Yorum Yanıtlama Hatası ({r.status_code}): {r.text}")
-                return False
-            return True
-    except Exception as e:
-        logger.error(f"Yorum Yanıtlama İstek Hatası: {e}")
-        return False
+    return await _graph_post(url, {"message": text[:300]}, "Yorum yanıtlama")
 
 
 async def send_private_reply(comment_id: str, text: str) -> bool:
-    if not IG_PAGE_ACCESS_TOKEN:
-        return False
-    target_id = IG_ACCOUNT_ID if IG_ACCOUNT_ID else "me"
-    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{target_id}/messages"
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(
-                url,
-                json={"recipient": {"comment_id": comment_id}, "message": {"text": text[:1000]}},
-                headers={"Authorization": f"Bearer {IG_PAGE_ACCESS_TOKEN}"},
-            )
-            if r.status_code >= 400:
-                logger.error(f"Özel DM Yanıtlama Hatası ({r.status_code}): {r.text}")
-                return False
-            return True
-    except Exception as e:
-        logger.error(f"Özel DM Yanıtlama İstek Hatası: {e}")
-        return False
+    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{IG_ACCOUNT_ID or 'me'}/messages"
+    return await _graph_post(url, {"recipient": {"comment_id": comment_id}, "message": {"text": text[:1000]}},
+                             "Yorum sonrası özel DM")
 
 
 # ---------------------------------------------------------------- İşleyiciler
 
-async def handle_dm(sender_id: str, text: str) -> None:
-    # Önce DM içinde bir anahtar kelime kuralı tetikleniyor mu kontrol et
-    matched = find_matching_rule(text, "all")
-    if matched and matched.get("dm_message"):
-        reply = matched["dm_message"]
-        rule_label = f"Kural: {matched.get('name')}"
-    else:
-        try:
-            DM_HISTORY[sender_id].append({"role": "user", "content": text})
-            reply = await call_gemini(text, "DM", list(DM_HISTORY[sender_id])[:-1])
-            DM_HISTORY[sender_id].append({"role": "assistant", "content": reply})
-            rule_label = "Gemini AI"
-        except Exception as e:
-            logger.error(f"DM Hatası: {e}")
-            reply = "Mesajınız için teşekkür ederiz, ekibimiz en kısa sürede dönüş sağlayacaktır."
-            rule_label = "Yedek Yanıt"
-
-    ok = await send_instagram_dm(sender_id, reply)
-    RECENT_LOGS.append({
-        "time": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-        "at": _now_iso(),
-        "type": "DM",
-        "kind": "dm",
-        "user": sender_id,
-        "input": text,
-        "reply": reply,
-        "dm_reply": reply,
-        "rule": rule_label,
-        "dm_ok": ok,
-        "matched_rule": f"{rule_label} {'✅' if ok else '❌'}",
-    })
-
-
 async def handle_comment(comment_id: str, text: str, username: str = "", media_id: str = "") -> None:
-    matched = find_matching_rule(text, media_id)
-    rule_name = matched.get("name") if matched else "Akıllı AI Yanıtı"
+    data = await STORE.load()
+    settings, pages = data["settings"], data["pages"]
+    page = pages.get(str(media_id))
+    if page and not page.get("is_active", True):
+        page = None
+    link = page_url(page)
+    target = page["title"] if page else "Genel kaynak sayfası"
 
-    if matched:
-        raw_public = matched.get("public_reply") or "Harika! Detayları DM kutunuza ilettik ✨"
-        public_reply = pick_variation(raw_public, username)
-        dm_reply = matched.get("dm_message") or "Merhaba! İlgilendiğiniz detayları sizinle paylaşıyoruz."
-    else:
-        try:
-            prompt = f"Kullanıcı (@{username}): '{text}'" if username else f"Yorum: '{text}'"
-            public_reply = await call_gemini(prompt, "COMMENT")
-            dm_prompt = f"Kullanıcı gönderi altına '{text}' yazdı. Ona DM kutusunda doğrudan bilgi ver."
-            dm_reply = await call_gemini(dm_prompt, "DM")
-        except Exception as e:
-            logger.error(f"Yorum Hatası: {e}")
-            public_reply = "Harika! İstediğiniz detayları DM kutunuza ilettik ✨"
-            dm_reply = "Merhaba! Gönderimize yaptığınız yorum için teşekkürler. İlgilendiğiniz detayları paylaşıyoruz."
+    public_reply = (settings.get("public_reply") or "Teşekkürler! Bağlantıları DM kutunuza gönderdik 📩")
+    public_reply = public_reply.replace("{user}", f"@{username}" if username else "")
+    # Gönderiye özel DM metni varsa o, yoksa ortak DM metni kullanılır
+    template = (page.get("dm_message") or "").strip() if page else ""
+    dm_reply = render_dm(template or settings.get("dm_template", ""), link,
+                         page["title"] if page else settings.get("general_title", ""))
 
     comment_ok = await reply_to_comment(comment_id, public_reply)
     dm_ok = await send_private_reply(comment_id, dm_reply)
-
-    status_tag = "✅" if (comment_ok and dm_ok) else ("⚠️ Yorum OK" if comment_ok else "⚠️ DM OK" if dm_ok else "❌")
-
+    status_tag = "✅" if (comment_ok and dm_ok) else ("⚠️" if (comment_ok or dm_ok) else "❌")
     RECENT_LOGS.append({
-        "time": datetime.now(timezone.utc).strftime("%H:%M:%S"),
-        "at": _now_iso(),
-        "type": "YORUM -> DM",
-        "kind": "comment",
-        "user": f"@{username}" if username else comment_id,
-        "media_id": media_id,
-        "input": text,
+        "time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
+        "type": "YORUM -> DM", "kind": "comment",
+        "user": f"@{username}" if username else comment_id, "media_id": media_id,
+        "input": text, "public_reply": public_reply, "dm_reply": dm_reply,
         "reply": f"Yorum: {public_reply} | DM: {dm_reply[:60]}...",
-        "public_reply": public_reply,
-        "dm_reply": dm_reply,
-        "rule": rule_name,
-        "comment_ok": comment_ok,
-        "dm_ok": dm_ok,
-        "matched_rule": f"{rule_name} {status_tag}",
+        "rule": target, "link": link, "comment_ok": comment_ok, "dm_ok": dm_ok,
+        "matched_rule": f"{target} {status_tag}",
+    })
+
+
+async def handle_dm(sender_id: str, text: str) -> None:
+    data = await STORE.load()
+    settings = data["settings"]
+    index_link = public_base()
+    if GEMINI_API_KEY:
+        try:
+            system_prompt = (settings.get("ai_prompt") or load_file_prompt()) + (
+                f"\n\nTakipçi bir videodaki araçların/kaynakların linklerini sorarsa şu sayfayı paylaş: {index_link}"
+                "\nBilmediğin bilgileri uydurma; 'Ekibimiz en kısa sürede dönüş yapacak' de.")
+            DM_HISTORY[sender_id].append({"role": "user", "content": text})
+            reply = await call_gemini(text, system_prompt, list(DM_HISTORY[sender_id])[:-1])
+            DM_HISTORY[sender_id].append({"role": "assistant", "content": reply})
+            label = "Yapay zekâ"
+        except Exception as e:
+            logger.error(f"DM yapay zekâ hatası: {e}")
+            reply, label = render_dm(settings.get("dm_template", ""), index_link, ""), "Genel sayfa linki (AI hatası)"
+    else:
+        reply, label = render_dm(settings.get("dm_template", ""), index_link, ""), "Genel sayfa linki"
+
+    ok = await send_instagram_dm(sender_id, reply)
+    RECENT_LOGS.append({
+        "time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
+        "type": "DM", "kind": "dm", "user": sender_id, "input": text,
+        "reply": reply, "dm_reply": reply, "rule": label, "dm_ok": ok,
+        "matched_rule": f"{label} {'✅' if ok else '❌'}",
     })
 
 
@@ -472,125 +380,202 @@ def valid_signature(body: bytes, header: str | None) -> bool:
     return hmac.compare_digest(expected, header.removeprefix("sha256="))
 
 
-# ---------------------------------------------------------------- Dashboard & API Endpoint'leri
+# ---------------------------------------------------------------- Giriş uç noktaları
 
-@app.get("/", include_in_schema=False)
-async def dashboard_page():
-    """Yönetim panelinin kabuğunu döndürür.
-
-    Sayfa artık sunucuda veri gömmez (kurallar, kayıtlar, AI talimatı); hepsi PIN ile
-    korunan API'lerden çekilir. Böylece Instagram'dan gelen yorum metinleri sayfaya HTML
-    olarak enjekte edilemez ve kişisel veriler şifresiz görüntülenemez.
-    """
-    return FileResponse(DASHBOARD_FILE, media_type="text/html; charset=utf-8",
-                        headers={"Cache-Control": "no-store"})
+@app.get("/api/session")
+async def session_info(request: Request):
+    """Panelin hangi giriş yöntemini göstereceği (herkese açık; gizli bilgi içermez)."""
+    mode = auth_mode()
+    email = None
+    if mode == "google":
+        email = auth.read_session(request.cookies.get(auth.SESSION_COOKIE, ""), SESSION_SECRET, ADMIN_EMAILS)
+    return {"mode": mode, "client_id": GOOGLE_CLIENT_ID if mode == "google" else "", "email": email}
 
 
-def _validate_rules_payload(data) -> list[dict]:
-    rules = data if isinstance(data, list) else (data or {}).get("rules")
-    if not isinstance(rules, list) or not all(isinstance(r, dict) for r in rules):
-        raise HTTPException(status_code=422, detail="Kurallar bir liste olmalı.")
-    clean = []
-    for r in rules:
-        clean.append({
-            "id": str(r.get("id") or f"rule_{int(time.time() * 1000)}"),
-            "name": str(r.get("name") or "İsimsiz Kural").strip()[:120],
-            "media_id": str(r.get("media_id") or "all").strip()[:64],
-            "keywords": str(r.get("keywords") or "*").strip()[:500],
-            "public_reply": str(r.get("public_reply") or "").strip()[:2000],
-            "dm_message": str(r.get("dm_message") or "").strip()[:1000],
-            "is_active": bool(r.get("is_active", True)),
-        })
-    return clean
+@app.post("/auth/google")
+async def google_login(request: Request):
+    if auth_mode() != "google":
+        raise HTTPException(status_code=400, detail="Google girişi bu sunucuda ayarlı değil.")
+    _check_same_origin(request)
+    data = await request.json()
+    try:
+        email = await auth.verify_google_credential(str(data.get("credential", "")), GOOGLE_CLIENT_ID, ADMIN_EMAILS)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    resp = JSONResponse({"status": "ok", "email": email})
+    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    resp.set_cookie(auth.SESSION_COOKIE, auth.sign_session(email, SESSION_SECRET), max_age=auth.SESSION_DAYS * 86400,
+                    httponly=True, secure=secure, samesite="lax", path="/")
+    return resp
 
+
+@app.post("/auth/logout")
+async def logout():
+    resp = JSONResponse({"status": "ok"})
+    resp.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return resp
+
+
+# ---------------------------------------------------------------- Yönetim API'leri
 
 @app.get("/api/status")
 async def get_status_api(request: Request):
-    """Paneldeki durum kartları için yapılandırma ve çalışma bilgisi (gizli değer döndürmez)."""
-    verify_pin(request)
-    rules = load_rules()
+    who = require_admin(request)
+    data = await STORE.load()
+    pages = data["pages"]
     return {
         "version": app.version,
+        "user": who,
+        "auth_mode": auth_mode(),
         "started_at": STARTED_AT.isoformat(timespec="seconds"),
+        "public_base": public_base(),
+        "public_base_configured": bool(PUBLIC_BASE_URL),
         "instagram": {
-            "token_set": bool(IG_PAGE_ACCESS_TOKEN),
-            "account_id": IG_ACCOUNT_ID,
-            "graph_version": IG_GRAPH_VERSION,
-            "media_ok": STATS["media_ok"],
-            "media_error": STATS["media_error"],
+            "token_set": bool(IG_PAGE_ACCESS_TOKEN), "account_id": IG_ACCOUNT_ID,
+            "media_ok": STATS["media_ok"], "media_error": STATS["media_error"],
             "media_checked_at": STATS["media_checked_at"],
         },
         "webhook": {
             "signature_check": bool(IG_APP_SECRET),
             "verify_token_is_default": IG_VERIFY_TOKEN == DEFAULT_VERIFY_TOKEN,
-            "events": STATS["webhook_events"],
-            "rejected": STATS["webhook_rejected"],
-            "last_event_at": STATS["last_webhook_at"],
-            "last_rejected_at": STATS["last_rejected_at"],
+            "events": STATS["webhook_events"], "rejected": STATS["webhook_rejected"],
+            "last_event_at": STATS["last_webhook_at"], "last_rejected_at": STATS["last_rejected_at"],
         },
         "ai": {"key_set": bool(GEMINI_API_KEY), "model": GEMINI_MODEL},
-        "security": {"admin_pin_is_default": ADMIN_PIN == DEFAULT_ADMIN_PIN},
-        "rules": {
-            "total": len(rules),
-            "active": sum(1 for r in rules if r.get("is_active", True)),
-        },
+        "storage": {"backend": STORE.backend, "error": STORE.last_error},
+        "security": {"admin_pin_is_default": auth_mode() == "pin" and ADMIN_PIN == DEFAULT_ADMIN_PIN},
+        "pages": {"total": len(pages), "active": sum(1 for p in pages.values() if p.get("is_active", True))},
         "logs": {"count": len(RECENT_LOGS), "capacity": RECENT_LOGS.maxlen},
     }
 
 
-@app.get("/api/media")
-async def get_media_api(request: Request):
-    verify_pin(request)
-    return await fetch_instagram_media()
+@app.get("/api/posts")
+async def get_posts_api(request: Request, fresh: int = 0):
+    """Instagram gönderileri + her birinin sayfa durumu. Yeni gönderi otomatik listelenir."""
+    require_admin(request)
+    media = await fetch_instagram_media(fresh=bool(fresh))
+    data = await STORE.load()
+    pages = data["pages"]
+    posts = []
+    seen = set()
+    for m in media:
+        page = pages.get(m["id"])
+        seen.add(m["id"])
+        posts.append({**m, "page": page, "page_url": page_url(page) if page else None})
+    # Sayfası olup son gönderiler listesinde görünmeyen eski videolar
+    for mid, page in pages.items():
+        if mid not in seen:
+            posts.append({"id": mid, "title": page.get("title", ""), "caption": "", "media_type": "", "permalink": "",
+                          "timestamp": "", "thumb": None, "page": page, "page_url": page_url(page), "older": True})
+    return {"posts": posts, "general_url": public_base(), "media_error": STATS["media_error"]}
 
 
-@app.get("/api/rules")
-async def get_rules_api(request: Request):
-    verify_pin(request)
-    return load_rules()
+def _clean_page(raw: dict) -> dict:
+    title = str(raw.get("title") or "").strip()[:120]
+    if not title:
+        raise HTTPException(status_code=422, detail="Sayfa başlığı gerekli.")
+    slug = slugify(str(raw.get("slug") or "") or title)
+    if not slug or slug in RESERVED_SLUGS:
+        raise HTTPException(status_code=422, detail="Sayfa adresi geçersiz; başka bir adres yazın.")
+    links = []
+    for link in (raw.get("links") or [])[:15]:
+        if not isinstance(link, dict):
+            continue
+        url = str(link.get("url") or "").strip()[:500]
+        label = str(link.get("label") or "").strip()[:80]
+        if not url and not label:
+            continue
+        if not public_pages.safe_url(url):
+            raise HTTPException(status_code=422, detail=f"Geçersiz link: “{url or label}”. Link https:// ile başlamalı.")
+        links.append({"label": label, "url": url, "note": str(link.get("note") or "").strip()[:120]})
+    prompts = []
+    for pr in (raw.get("prompts") or [])[:12]:
+        if not isinstance(pr, dict):
+            continue
+        text = str(pr.get("text") or "").strip()[:4000]
+        if not text:
+            continue
+        prompts.append({"label": str(pr.get("label") or "Prompt").strip()[:100],
+                        "tool": str(pr.get("tool") or "").strip()[:100], "text": text})
+    steps = [str(s).strip()[:300] for s in (raw.get("steps") or [])[:15] if str(s).strip()]
+    external = str(raw.get("external_url") or "").strip()[:500]
+    if external and not public_pages.safe_url(external):
+        raise HTTPException(status_code=422, detail="Harici sayfa adresi https:// ile başlamalı.")
+    return {"title": title, "slug": slug, "body": str(raw.get("body") or "").strip()[:2000],
+            "links": links, "prompts": prompts, "steps": steps, "tip": str(raw.get("tip") or "").strip()[:600],
+            "external_url": external, "dm_message": str(raw.get("dm_message") or "").strip()[:900],
+            "is_active": bool(raw.get("is_active", True)), "updated_at": _now_iso()}
 
 
-@app.post("/api/rules")
-async def update_rules_api(request: Request):
-    verify_pin(request)
-    rules = _validate_rules_payload(await request.json())
-    save_rules(rules)
-    return {"status": "ok", "count": len(rules)}
+@app.put("/api/pages/{media_id}")
+async def save_page_api(media_id: str, request: Request):
+    require_admin(request)
+    if not re.fullmatch(r"[0-9A-Za-z_]{1,40}", media_id) or media_id == GENERAL_KEY:
+        raise HTTPException(status_code=422, detail="Geçersiz gönderi kimliği.")
+    page = _clean_page(await request.json())
+    data = await STORE.load(force=True)
+    for mid, other in data["pages"].items():
+        if mid != media_id and other.get("slug") == page["slug"]:
+            raise HTTPException(status_code=409, detail=f"“{page['slug']}” adresi başka bir videoda kullanılıyor.")
+    data["pages"][media_id] = page
+    try:
+        await STORE.save(data)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Kaydedilemedi: {e}")
+    return {"status": "ok", "page": page, "page_url": page_url(page)}
 
 
-@app.post("/api/test-match")
-async def test_match_api(request: Request):
-    """Örnek bir yorumun hangi kurala düşeceğini gösterir. Instagram'a hiçbir şey göndermez."""
-    verify_pin(request)
-    data = await request.json()
-    text = str(data.get("text", ""))[:500]
-    media_id = str(data.get("media_id", "") or "")
-    rule = find_matching_rule(text, media_id) if text.strip() else None
-    return {"matched": bool(rule), "rule": rule}
+@app.delete("/api/pages/{media_id}")
+async def delete_page_api(media_id: str, request: Request):
+    require_admin(request)
+    data = await STORE.load(force=True)
+    if data["pages"].pop(media_id, None) is None:
+        raise HTTPException(status_code=404, detail="Sayfa bulunamadı.")
+    try:
+        await STORE.save(data)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Silinemedi: {e}")
+    return {"status": "ok"}
+
+
+@app.get("/api/settings")
+async def get_settings_api(request: Request):
+    require_admin(request)
+    s = (await STORE.load())["settings"]
+    return {**s, "ai_prompt": s.get("ai_prompt") or load_file_prompt()}
+
+
+@app.post("/api/settings")
+async def save_settings_api(request: Request):
+    require_admin(request)
+    raw = await request.json()
+    reply = str(raw.get("public_reply") or "").strip()
+    dm = str(raw.get("dm_template") or "").strip()
+    if not reply:
+        raise HTTPException(status_code=422, detail="Yorum yanıtı boş olamaz.")
+    if len(reply) > 300:
+        raise HTTPException(status_code=422, detail="Yorum yanıtı en fazla 300 karakter olabilir.")
+    if not dm:
+        raise HTTPException(status_code=422, detail="DM mesajı boş olamaz.")
+    data = await STORE.load(force=True)
+    data["settings"].update({
+        "public_reply": reply,
+        "dm_template": dm[:900],
+        "general_title": str(raw.get("general_title") or "").strip()[:120] or data["settings"].get("general_title", ""),
+        "general_intro": str(raw.get("general_intro") or "").strip()[:500],
+        "ai_prompt": str(raw.get("ai_prompt") or "").strip()[:8000],
+    })
+    try:
+        await STORE.save(data)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Kaydedilemedi: {e}")
+    return {"status": "ok"}
 
 
 @app.get("/api/logs")
 async def get_logs_api(request: Request):
-    verify_pin(request)
+    require_admin(request)
     return list(RECENT_LOGS)
-
-
-@app.get("/api/prompt")
-async def get_prompt(request: Request):
-    verify_pin(request)
-    return {"prompt": load_system_prompt()}
-
-
-@app.post("/api/prompt")
-async def update_prompt(request: Request):
-    verify_pin(request)
-    data = await request.json()
-    new_prompt = str(data.get("prompt", "")).strip()
-    if not new_prompt:
-        raise HTTPException(status_code=422, detail="AI talimatı boş olamaz.")
-    with open(PROMPT_FILE, "w", encoding="utf-8") as f:
-        f.write(new_prompt[:8000])
-    return {"status": "ok"}
 
 
 @app.get("/health")
@@ -598,81 +583,123 @@ async def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
+# ---------------------------------------------------------------- Webhook (Meta)
+
 @app.get("/webhook")
 async def verify_webhook(request: Request):
     params = request.query_params
-    mode = params.get("hub.mode")
-    token = params.get("hub.verify_token")
-    challenge = params.get("hub.challenge", "")
-
-    if mode == "subscribe" and token == IG_VERIFY_TOKEN:
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == IG_VERIFY_TOKEN:
         logger.info("Meta Webhook doğrulaması başarılı.")
-        return PlainTextResponse(challenge)
-
+        return PlainTextResponse(params.get("hub.challenge", ""))
     raise HTTPException(status_code=403, detail="Doğrulama başarısız")
 
 
 @app.post("/webhook")
 async def receive_webhook(request: Request, background: BackgroundTasks):
     body = await request.body()
-    signature = request.headers.get("X-Hub-Signature-256")
-
-    if not valid_signature(body, signature):
+    if not valid_signature(body, request.headers.get("X-Hub-Signature-256")):
         STATS["webhook_rejected"] += 1
         STATS["last_rejected_at"] = _now_iso()
         raise HTTPException(status_code=401, detail="Geçersiz imza")
-
     STATS["webhook_events"] += 1
     STATS["last_webhook_at"] = _now_iso()
 
     try:
         data = json.loads(body)
-    except json.JSONDecodeError:
+    except ValueError:   # bozuk JSON veya UTF-8 olmayan gövde
         return JSONResponse({"status": "invalid_json"}, status_code=400)
-
     logger.info(f"Webhook alındı: {data}")
 
     for entry in data.get("entry", []):
-        # 1. Doğrudan DM Mesajları
         for msg_event in entry.get("messaging", []):
-            mid = msg_event.get("message", {}).get("mid")
+            message = msg_event.get("message", {})
+            mid, text = message.get("mid"), message.get("text")
             sender_id = msg_event.get("sender", {}).get("id")
-            text = msg_event.get("message", {}).get("text")
-
-            if (
-                mid
-                and mid not in SEEN_EVENT_IDS
-                and text
-                and not msg_event.get("message", {}).get("is_echo")
-                and str(sender_id) != IG_ACCOUNT_ID
-            ):
+            if mid and mid not in SEEN_EVENT_IDS and text and not message.get("is_echo") and str(sender_id) != IG_ACCOUNT_ID:
                 SEEN_EVENT_IDS.append(mid)
                 background.add_task(handle_dm, sender_id, text)
 
-        # 2. Gönderi Yorumları
-        comment_candidates = []
-        for change in entry.get("changes", []):
-            if change.get("field") == "comments":
-                comment_candidates.append(change.get("value", {}))
+        comment_candidates = [c.get("value", {}) for c in entry.get("changes", []) if c.get("field") == "comments"]
         if entry.get("field") == "comments":
             comment_candidates.append(entry.get("value", {}))
-
         for val in comment_candidates:
             if not isinstance(val, dict):
                 continue
-            cid = val.get("id")
-            ctext = val.get("text")
+            cid, ctext = val.get("id"), val.get("text")
             from_obj = val.get("from", {})
-            cuser = from_obj.get("username", "")
-            from_id = str(from_obj.get("id", ""))
+            cuser, from_id = from_obj.get("username", ""), str(from_obj.get("id", ""))
             media_id = val.get("media", {}).get("id", "")
-
-            # Kendi yorumumuza veya botun kendi cevabına tekrar yanıt vermeyelim
-            if (from_id and from_id == IG_ACCOUNT_ID) or (cuser and cuser.lower() == "likyastudios"):
+            # Kendi yorumumuza / botun yanıtına tekrar yanıt verme
+            if (from_id and from_id == IG_ACCOUNT_ID) or (cuser and cuser.lower() == IG_USERNAME):
                 continue
-
             if cid and cid not in SEEN_EVENT_IDS and ctext:
                 SEEN_EVENT_IDS.append(cid)
                 background.add_task(handle_comment, cid, ctext, cuser, media_id)
-
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------- Herkese açık video sayfaları
+
+def _is_public_host(request: Request) -> bool:
+    if not PUBLIC_BASE_URL:
+        return False
+    p = urlparse(PUBLIC_BASE_URL)
+    return p.path in ("", "/") and request.headers.get("host", "").split(":")[0] == p.hostname
+
+
+async def _thumbs() -> dict[str, str]:
+    try:
+        return {m["id"]: m.get("thumb") for m in await fetch_instagram_media()}
+    except Exception:
+        return {}
+
+
+async def _public_index() -> HTMLResponse:
+    data = await STORE.load()
+    thumbs = await _thumbs()
+    order = {mid: i for i, mid in enumerate(thumbs)}
+    items = [{"title": p["title"], "href": page_url(p), "thumb": thumbs.get(mid),
+              "link_count": len(p.get("links") or []), "prompt_count": len(p.get("prompts") or []),
+              "_o": order.get(mid, 10_000)}
+             for mid, p in data["pages"].items() if p.get("is_active", True) and mid != GENERAL_KEY]
+    items.sort(key=lambda x: x["_o"])
+    s = data["settings"]
+    html = public_pages.render_index(s.get("general_title") or "Likya Studios", s.get("general_intro", ""), items, public_base())
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=60"})
+
+
+async def _public_page(slug: str) -> HTMLResponse:
+    data = await STORE.load()
+    for mid, page in data["pages"].items():
+        if page.get("slug") == slug and page.get("is_active", True):
+            thumb = (await _thumbs()).get(mid)
+            return HTMLResponse(public_pages.render_video_page(page, thumb, public_base(), public_base()),
+                                headers={"Cache-Control": "public, max-age=60"})
+    return HTMLResponse(public_pages.render_not_found(public_base()), status_code=404)
+
+
+@app.get("/p", include_in_schema=False)
+async def public_index_path():
+    return await _public_index()
+
+
+@app.get("/p/{slug}", include_in_schema=False)
+async def public_page_path(slug: str):
+    return await _public_page(slug)
+
+
+@app.get("/", include_in_schema=False)
+async def root(request: Request):
+    if _is_public_host(request):
+        return await _public_index()
+    # Yönetim paneli kabuğu: veri gömülmez, her şey yetkili API'lerden gelir
+    return FileResponse(DASHBOARD_FILE, media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow",
+                                 "X-Frame-Options": "DENY", "Referrer-Policy": "strict-origin-when-cross-origin"})
+
+
+@app.get("/{slug}", include_in_schema=False)
+async def public_page_root(slug: str, request: Request):
+    if _is_public_host(request):
+        return await _public_page(slug)
+    raise HTTPException(status_code=404, detail="Bulunamadı")

@@ -1,0 +1,182 @@
+{
+  "settings": {
+    "public_reply": "Teşekkürler! İstediğiniz bağlantıları DM kutunuza gönderdik 📩",
+    "dm_template": "Merhaba! 👋 İstediğin bağlantılar bu sayfada:\n{link}\n\nKaydetmeyi unutma 🔖",
+    "general_title": "Likya Studios — Video Kaynakları",
+    "general_intro": "Videolarımızda bahsettiğimiz araçların ve kaynakların bağlantıları. İzlediğin videoyu listeden seç.",
+    "ai_prompt": ""
+  },
+  "pages": {
+    "18121864655327295": {
+      "title": "Örgü yemek videosu promptları",
+      "slug": "orgu-yemek",
+      "body": "Gemini ile örgüden yemek görseli ve videosu üretmek için videoda kullanılan promptların tamamı.",
+      "prompts": [
+        {
+          "label": "1. Sebze sote — görsel promptu",
+          "tool": "Gemini'de, dikey 9:16",
+          "text": "Örgüden (tığ işi yün) yapılmış minyatür bir sebze sote: kırmızı biber, yeşil biber, havuç dilimleri ve köfteler, hepsi renkli yün ilmekleriyle örülmüş. Örgüden bir tavada, örgü bir ocağın üstünde pişiyor, tavadan buhar yükseliyor. Gerçek bir el örgü spatulayla karıştırıyor. Sıcak, loş bir mutfak, arka plan bulanık, yakın çekim, sinematik ışık, ilmekler net görünsün. Dikey 9:16."
+        },
+        {
+          "label": "1. Sebze sote — video promptu",
+          "tool": "Görseli Gemini Omni'ye ekle",
+          "text": "Bu görseli 10 saniyelik videoya çevir. El örgü spatulayla sebzeleri yavaşça karıştırsın, örgü sebzeler tavada hafifçe zıplasın, buhar yükselsin. Kamera yavaşça yaklaşsın. Dikey 9:16, yazı ve logo olmasın."
+        },
+        {
+          "label": "2. Bonus: doğrama — görsel promptu",
+          "tool": "Gemini'de, dikey 9:16",
+          "text": "Örgüden (tığ işi yün) yapılmış bir kesme tahtası üzerinde örgü bir domates ve örgü bir salatalık. Gerçek bir el, örgüden yapılmış bir bıçakla domatesi dilimliyor; kesilen dilimlerin içi de ilmek ilmek yün. Yanda örgü soğan halkaları. Sıcak, loş bir mutfak, arka plan bulanık, yakın çekim, sinematik ışık, ilmekler net görünsün. Dikey 9:16."
+        },
+        {
+          "label": "2. Bonus: doğrama — video promptu",
+          "tool": "Görseli Gemini Omni'ye ekle",
+          "text": "Bu görseli 10 saniyelik videoya çevir. El, örgü bıçakla domatesi ritmik şekilde dilimlesin, yün dilimler tahtaya düşüp hafifçe yaylansın, kesim sesleri yumuşak ve tok olsun. Kamera sabit, hafif yaklaşsın. Dikey 9:16, yazı ve logo olmasın."
+        }
+      ],
+      "steps": [],
+      "tip": "\"Sote\" yerine kendi yemeğini yaz: menemen, mantı, pizza… Video için Google AI Plus gerekiyor; üniversite öğrencisiysen 12 ay ücretsiz.",
+      "links": [
+        {
+          "label": "Gemini öğrenci teklifi",
+          "url": "https://gemini.google.com/students",
+          "note": "Üniversite öğrencilerine 12 ay ücretsiz"
+        }
+      ],
+      "is_active": true,
+      "external_url": ""
+    },
+    "17917802667556092": {
+      "title": "Stirling PDF",
+      "slug": "stirling-pdf",
+      "body": "Bilgisayarına indirip kullanabileceğin ücretsiz PDF aracı. İndirince ayarlardan dili Türkçe yapabilirsin. Bireysel kullanım ücretsiz, kart istemiyor.",
+      "links": [
+        {
+          "label": "Stirling PDF (bilgisayarına indir)",
+          "url": "https://www.stirling.com",
+          "note": ""
+        },
+        {
+          "label": "GitHub sayfası",
+          "url": "https://github.com/Stirling-Tools/Stirling-PDF",
+          "note": ""
+        },
+        {
+          "label": "Kurulum rehberi",
+          "url": "https://docs.stirlingpdf.com",
+          "note": ""
+        }
+      ],
+      "is_active": true,
+      "prompts": [],
+      "steps": [],
+      "tip": "",
+      "external_url": ""
+    },
+    "18154159846505090": {
+      "title": "Google'ın 7 ücretsiz yapay zekâ aracı",
+      "slug": "google-7-yapay-zeka-araci",
+      "body": "Videoda bahsettiğimiz 7 ücretsiz Google yapay zekâ aracı.",
+      "links": [
+        {
+          "label": "Gemini Notebook (NotebookLM)",
+          "url": "https://notebooklm.google.com",
+          "note": ""
+        },
+        {
+          "label": "Google AI Studio",
+          "url": "https://aistudio.google.com",
+          "note": ""
+        },
+        {
+          "label": "Stitch",
+          "url": "https://labs.google",
+          "note": ""
+        },
+        {
+          "label": "Antigravity",
+          "url": "https://idx.dev",
+          "note": ""
+        },
+        {
+          "label": "Lyria & Gemini",
+          "url": "https://gemini.google.com",
+          "note": ""
+        },
+        {
+          "label": "Flow (Veo)",
+          "url": "https://labs.google/fx",
+          "note": ""
+        },
+        {
+          "label": "Öğrenci indirimi",
+          "url": "https://gemini.google.com/students",
+          "note": ""
+        }
+      ],
+      "is_active": true,
+      "prompts": [],
+      "steps": [],
+      "tip": "",
+      "external_url": ""
+    },
+    "18113791415261080": {
+      "title": "Ücretsiz 5 yapay zekâ aracı",
+      "slug": "ucretsiz-5-yapay-zeka-araci",
+      "body": "Videodaki 5 ücretsiz yapay zekâ aracının doğrudan bağlantıları.",
+      "links": [
+        {
+          "label": "Gemini Notebook (NotebookLM)",
+          "url": "https://notebooklm.google.com",
+          "note": ""
+        },
+        {
+          "label": "Google AI Studio",
+          "url": "https://aistudio.google.com",
+          "note": ""
+        },
+        {
+          "label": "Ollama",
+          "url": "https://ollama.com",
+          "note": ""
+        },
+        {
+          "label": "Whisper",
+          "url": "https://github.com/openai/whisper",
+          "note": ""
+        },
+        {
+          "label": "Upscayl",
+          "url": "https://upscayl.org",
+          "note": ""
+        }
+      ],
+      "is_active": true,
+      "prompts": [],
+      "steps": [],
+      "tip": "",
+      "external_url": ""
+    },
+    "18106100525456225": {
+      "title": "LocalSend — dosya paylaşım aracı",
+      "slug": "localsend",
+      "body": "Açık kaynak dosya aktarım aracı. Aynı Wi-Fi ağında internetsiz ve şifreli çalışır.",
+      "links": [
+        {
+          "label": "Resmi site ve indirme",
+          "url": "https://localsend.org",
+          "note": ""
+        },
+        {
+          "label": "GitHub sayfası",
+          "url": "https://github.com/localsend/localsend",
+          "note": ""
+        }
+      ],
+      "is_active": true,
+      "prompts": [],
+      "steps": [],
+      "tip": "",
+      "external_url": ""
+    }
+  }
+}

@@ -5,31 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light dark">
-<title>Likya Studios — Instagram Asistanı</title>
+<title>Likya Studios — Instagram Paneli</title>
 <style>
   :root {
-    --bg: #f6f1e8;
-    --surface: #fffdf9;
-    --surface-2: #f1eadf;
-    --line: #e2d8c9;
-    --ink: #1c1917;
-    --muted: #5f564d;
-    --accent: #b4532a;          /* metin için güvenli terracotta */
-    --accent-fill: #c75a2c;
-    --accent-ink: #ffffff;
-    --ok: #23704a; --ok-bg: #e3f1e8;
-    --warn: #8a4b06; --warn-bg: #fbeed6;
-    --err: #a8261b; --err-bg: #fbe4e1;
-    --info: #24527a; --info-bg: #e3edf6;
-    --focus: #1d4ed8;
-    --radius: 14px;
+    --bg: #f6f1e8; --surface: #fffdf9; --surface-2: #f1eadf; --line: #e2d8c9;
+    --ink: #1c1917; --muted: #5f564d; --accent: #b4532a; --accent-fill: #c75a2c; --accent-ink: #fff;
+    --ok: #23704a; --ok-bg: #e3f1e8; --warn: #8a4b06; --warn-bg: #fbeed6;
+    --err: #a8261b; --err-bg: #fbe4e1; --info: #24527a; --info-bg: #e3edf6;
+    --focus: #1d4ed8; --radius: 14px;
     --shadow: 0 1px 2px rgba(28,25,23,.06), 0 4px 16px rgba(28,25,23,.05);
     --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #151210; --surface: #1e1a17; --surface-2: #27221e; --line: #3a332d;
-      --ink: #f3ede4; --muted: #b5aa9d; --accent: #f0a274; --accent-fill: #d0662f; --accent-ink: #fff;
+      --ink: #f3ede4; --muted: #b5aa9d; --accent: #f0a274; --accent-fill: #d0662f;
       --ok: #7dd3a0; --ok-bg: #173226; --warn: #f4c26b; --warn-bg: #3a2a10;
       --err: #ff9b8f; --err-bg: #3d1a16; --info: #9cc8f0; --info-bg: #182a3b;
       --focus: #93b4ff; --shadow: 0 1px 2px rgba(0,0,0,.4);
@@ -44,12 +34,12 @@
   button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 16px; }
+  .muted { color: var(--muted); }
 
-  /* Butonlar */
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px;
          border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600;
-         text-decoration: none; white-space: nowrap; }
+         text-decoration: none; white-space: nowrap; color: var(--ink); }
   .btn:hover { background: var(--surface-2); }
   .btn-primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--accent-ink); }
   .btn-primary:hover { background: var(--accent-fill); filter: brightness(.94); }
@@ -59,76 +49,75 @@
   .btn[disabled] { opacity: .55; cursor: not-allowed; }
   .btn svg, .ico { width: 18px; height: 18px; flex: none; }
 
-  /* Formlar */
-  label.field { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .field { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
   .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
-  .input, select.input, textarea.input { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px;
-        border: 1px solid var(--line); background: var(--surface); }
-  textarea.input { min-height: 96px; resize: vertical; }
+  .input { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+  textarea.input { min-height: 96px; resize: vertical; line-height: 1.5; }
   .input:focus { border-color: var(--accent); }
   .form-row { margin-bottom: 18px; }
   .err-text { color: var(--err); font-size: 13px; margin: 6px 0 0; }
+  .prefix { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .prefix span { display: flex; align-items: center; padding: 0 10px; background: var(--surface-2); color: var(--muted); font-size: 13px; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prefix input { border: 0; border-radius: 0; min-width: 0; flex: 1; }
 
   /* Giriş */
   #login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
-  .login-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
-                padding: 28px 24px; box-shadow: var(--shadow); }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-mark { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-fill); color: #fff; display: grid;
-                place-items: center; font-weight: 800; font-size: 20px; flex: none; }
-  .brand small { display: block; color: var(--muted); font-size: 13px; }
-  .check { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
-  .check input { width: 20px; height: 20px; accent-color: var(--accent-fill); }
+  .login-card { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; box-shadow: var(--shadow); }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand-mark { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-fill); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 20px; flex: none; }
+  .brand small { display: block; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #googleBtn { min-height: 44px; display: flex; justify-content: center; margin-top: 8px; }
 
-  /* Üst bar */
-  header.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 92%, transparent);
-               backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  header.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 68px; }
   header.top h1 { font-size: 17px; }
-  .top-actions { display: flex; gap: 8px; }
+  .top-actions { display: flex; gap: 8px; flex: none; }
 
-  /* Durum kartları */
   .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px; margin: 20px 0 12px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
   .stat { padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .stat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
-  .stat-value { font-size: 17px; font-weight: 700; }
+  .stat-value { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
   .stat-sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
-          background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
   .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
   .pill.ok { background: var(--ok-bg); color: var(--ok); }
   .pill.warn { background: var(--warn-bg); color: var(--warn); }
   .pill.err { background: var(--err-bg); color: var(--err); }
   .pill.plain::before { display: none; }
 
-  /* Uyarılar */
   .alerts { display: grid; gap: 8px; margin-bottom: 16px; }
-  .alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; font-size: 14px; border: 1px solid transparent; }
+  .alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; font-size: 14px; }
   .alert .ico { margin-top: 2px; }
   .alert.err { background: var(--err-bg); color: var(--err); }
   .alert.warn { background: var(--warn-bg); color: var(--warn); }
   .alert.info { background: var(--info-bg); color: var(--info); }
-  .alert b { font-weight: 700; }
-  .alert p { margin: 2px 0 0; color: inherit; opacity: .92; }
+  .alert p { margin: 2px 0 0; }
 
-  /* Sekmeler */
   .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-  .tab { min-height: 48px; padding: 0 14px; border: 0; background: none; cursor: pointer; font-weight: 600; color: var(--muted);
-         border-bottom: 3px solid transparent; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+  .tab { min-height: 48px; padding: 0 14px; border: 0; background: none; cursor: pointer; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
   .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent-fill); }
   .tab .count { font-size: 12px; background: var(--surface-2); padding: 1px 8px; border-radius: 999px; }
-  .panel { padding: 20px 0 48px; }
+  .panel { padding: 20px 0 56px; }
   .panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
   .panel-head h2 { font-size: 20px; }
   .panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
-
-  /* Segment filtre */
-  .seg { display: inline-flex; background: var(--surface-2); border-radius: 12px; padding: 4px; gap: 4px; }
-  .seg button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; font-weight: 600; color: var(--muted); }
+  .seg { display: inline-flex; background: var(--surface-2); border-radius: 12px; padding: 4px; gap: 4px; flex-wrap: wrap; }
+  .seg button { min-height: 40px; padding: 0 12px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; font-weight: 600; color: var(--muted); }
   .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 
-  /* Hareket listesi */
+  /* Gönderi ızgarası */
+  .posts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; }
+  .post { display: flex; flex-direction: column; overflow: hidden; }
+  .post-thumb { aspect-ratio: 4 / 5; width: 100%; object-fit: cover; background: var(--surface-2); display: block; }
+  .post-thumb.ph { display: grid; place-items: center; color: var(--muted); font-size: 13px; }
+  .post-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .post-title { font-weight: 700; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .post-meta { color: var(--muted); font-size: 13px; }
+  .post-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+  .post-actions .btn { flex: 1 1 auto; }
+  .post-link { font-size: 13px; overflow-wrap: anywhere; }
+
   .list { display: grid; gap: 10px; }
   .item { padding: 14px 16px; }
   .item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -138,69 +127,61 @@
   .tag.comment { background: var(--info-bg); color: var(--info); }
   .tag.dm { background: color-mix(in srgb, var(--accent-fill) 16%, transparent); color: var(--accent); }
   .quote { margin: 0; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; overflow-wrap: anywhere; white-space: pre-wrap; }
-  .reply-block { margin-top: 8px; }
-  .reply-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+  .reply-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 2px; }
   .reply-text { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
   details.more summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--accent); font-weight: 600; }
   .item-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+  .chip { font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); overflow-wrap: anywhere; }
 
-  /* Boş/hata durumları */
   .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
   .empty h3 { color: var(--ink); font-size: 17px; margin-bottom: 6px; }
-  .empty p { margin: 0 auto; max-width: 460px; }
-  .skeleton { height: 92px; border-radius: var(--radius); background: linear-gradient(90deg, var(--surface-2), var(--surface), var(--surface-2));
-              background-size: 200% 100%; animation: sk 1.4s infinite linear; }
+  .empty p { margin: 0 auto; max-width: 480px; }
+  .skeleton { min-height: 92px; border-radius: var(--radius); background: linear-gradient(90deg, var(--surface-2), var(--surface), var(--surface-2)); background-size: 200% 100%; animation: sk 1.4s infinite linear; }
+  .skeleton.tall { min-height: 360px; }
   @keyframes sk { to { background-position: -200% 0; } }
 
-  /* Kurallar */
-  .rule { padding: 16px; }
-  .rule.off { opacity: .72; }
-  .rule-top { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
-  .rule-title { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
-  .rule-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .chip { font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); overflow-wrap: anywhere; }
-  .rule-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-  .switch { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; border: 0; background: none; cursor: pointer; font-weight: 600; flex: none; }
-  .switch .track { width: 44px; height: 26px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; }
+  /* Ayarlar */
+  .settings-grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .settings-grid { grid-template-columns: 1fr 1fr; } }
+  .set-card { padding: 18px; }
+  .set-card h3 { font-size: 16px; margin-bottom: 4px; }
+  .set-card > p { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  .bubble { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble b { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .savebar { position: sticky; bottom: 0; z-index: 5; margin-top: 16px; padding: 12px 0; display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; background: var(--bg); border-top: 1px solid var(--line); }
+
+  /* Link listesi düzenleyici */
+  .links-ed { display: grid; gap: 10px; }
+  .link-row { display: grid; grid-template-columns: 1fr 44px; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+  .link-row .fields { display: grid; gap: 8px; min-width: 0; }
+  @media (min-width: 640px) { .link-row .fields { grid-template-columns: 1fr 1.4fr; } }
+  .switch { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; border: 0; background: none; cursor: pointer; font-weight: 600; }
+  .switch .track { width: 44px; height: 26px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; flex: none; }
   .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
   .switch[aria-checked="true"] .track { background: var(--ok); }
   .switch[aria-checked="true"] .track::after { transform: translateX(18px); }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-  .toolbar .input { flex: 1 1 220px; }
-  .tester { padding: 16px; margin-bottom: 16px; }
-  .tester-row { display: grid; grid-template-columns: 1fr; gap: 10px; }
-  @media (min-width: 720px) { .tester-row { grid-template-columns: 2fr 1.4fr auto; align-items: end; } }
-  .tester-result { margin-top: 12px; }
+  .ed-head { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+  .ed-head img, .ed-head .ph { width: 56px; height: 70px; border-radius: 8px; object-fit: cover; background: var(--surface-2); flex: none; }
 
-  /* AI talimatı */
-  .prompt-area { min-height: 320px; font-size: 14px; line-height: 1.55; }
-  .prompt-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
-
-  /* Dialog */
-  dialog { border: 0; padding: 0; border-radius: 18px; width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px);
-           background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  dialog { border: 0; padding: 0; border-radius: 18px; width: min(680px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
   dialog::backdrop { background: rgba(20,16,12,.55); }
-  .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--line);
-              position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 12px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 1; }
   .dlg-head h2 { font-size: 18px; }
   .dlg-body { padding: 20px; }
-  .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line);
-              position: sticky; bottom: 0; background: var(--surface); flex-wrap: wrap; }
+  .dlg-foot { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--surface); flex-wrap: wrap; align-items: center; }
+  .dlg-foot .spacer { flex: 1; }
 
-  /* Bildirim */
   #toasts { position: fixed; z-index: 100; left: 50%; bottom: 16px; transform: translateX(-50%); display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); }
   .toast { padding: 12px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
   .toast.err { background: var(--err); color: #fff; }
 
-  .muted { color: var(--muted); }
-  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  @media (max-width: 520px) {
+  @media (max-width: 560px) {
     header.top .brand small { display: none; }
     .top-actions .label { display: none; }
     .top-actions .btn { width: 44px; padding: 0; }
     .item-time { margin-left: 0; width: 100%; }
     .dlg-foot .btn { flex: 1 1 auto; }
+    .dlg-foot .spacer { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -221,20 +202,25 @@
 
 <!-- ================= Giriş ================= -->
 <main id="login">
-  <form class="login-card" id="loginForm" novalidate>
+  <div class="login-card">
     <div class="brand" style="margin-bottom:22px">
       <div class="brand-mark" aria-hidden="true">L</div>
-      <div><h1 style="font-size:19px">Instagram Asistanı</h1><small>Likya Studios yönetim paneli</small></div>
+      <div><h1 style="font-size:19px">Instagram Paneli</h1><small>Likya Studios · yalnızca yetkili hesap</small></div>
     </div>
-    <div class="form-row">
-      <label class="field" for="pinInput">Yönetim şifresi (PIN)</label>
-      <input class="input" id="pinInput" type="password" autocomplete="current-password" required aria-describedby="pinErr">
-      <p class="err-text" id="pinErr" role="alert" hidden></p>
+    <div id="loginGoogle" hidden>
+      <p style="margin:0 0 12px">Devam etmek için yetkili Google hesabınızla giriş yapın.</p>
+      <div id="googleBtn"></div>
     </div>
-    <label class="check"><input type="checkbox" id="rememberPin"> Bu cihazda beni hatırla</label>
-    <button class="btn btn-primary" type="submit" id="loginBtn" style="width:100%;margin-top:14px">Giriş yap</button>
-    <p class="hint" style="margin-top:14px">Şifre, sunucudaki <code>ADMIN_PIN</code> ayarıdır. Ortak kullanılan bir bilgisayarda “hatırla” seçeneğini işaretlemeyin.</p>
-  </form>
+    <form id="loginPin" novalidate hidden>
+      <div class="form-row">
+        <label class="field" for="pinInput">Yönetim şifresi (PIN)</label>
+        <input class="input" id="pinInput" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary" type="submit" id="loginBtn" style="width:100%">Giriş yap</button>
+    </form>
+    <p class="err-text" id="loginErr" role="alert" hidden></p>
+    <p class="hint" id="loginLoading">Yükleniyor…</p>
+  </div>
 </main>
 
 <!-- ================= Uygulama ================= -->
@@ -243,7 +229,7 @@
     <div class="wrap">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">L</div>
-        <div><h1>Instagram Asistanı</h1><small>@likyastudios · Yorum ve DM otomasyonu</small></div>
+        <div style="min-width:0"><h1>Instagram Paneli</h1><small id="whoami">@likyastudios</small></div>
       </div>
       <div class="top-actions">
         <button class="btn" id="refreshAll" type="button" aria-label="Tüm verileri yenile"><svg><use href="#i-refresh"/></svg><span class="label">Yenile</span></button>
@@ -253,27 +239,37 @@
   </header>
 
   <main class="wrap">
-    <section aria-labelledby="statusTitle">
-      <h2 id="statusTitle" class="sr-only">Sistem durumu</h2>
-      <div class="status-grid" id="statusGrid">
-        <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
-      </div>
+    <section aria-label="Sistem durumu">
+      <div class="status-grid" id="statusGrid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
       <div class="alerts" id="alerts" aria-live="polite"></div>
     </section>
 
     <div class="tabs" role="tablist" aria-label="Panel bölümleri">
-      <button class="tab" role="tab" id="tab-activity" aria-controls="panel-activity" aria-selected="true">Hareketler <span class="count" id="cntLogs">0</span></button>
-      <button class="tab" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1">Kurallar <span class="count" id="cntRules">0</span></button>
-      <button class="tab" role="tab" id="tab-ai" aria-controls="panel-ai" aria-selected="false" tabindex="-1">AI talimatı</button>
+      <button class="tab" role="tab" id="tab-posts" aria-controls="panel-posts" aria-selected="true">Gönderiler <span class="count" id="cntPosts">0</span></button>
+      <button class="tab" role="tab" id="tab-activity" aria-controls="panel-activity" aria-selected="false" tabindex="-1">Hareketler <span class="count" id="cntLogs">0</span></button>
+      <button class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Mesaj ayarları</button>
     </div>
 
-    <!-- Hareketler -->
-    <section class="panel" role="tabpanel" id="panel-activity" aria-labelledby="tab-activity">
+    <!-- Gönderiler -->
+    <section class="panel" role="tabpanel" id="panel-posts" aria-labelledby="tab-posts">
       <div class="panel-head">
         <div>
-          <h2>Son hareketler</h2>
-          <p id="logsUpdated">Yükleniyor…</p>
+          <h2>Gönderiler</h2>
+          <p>Instagram'da paylaştığınız gönderiler burada kendiliğinden görünür. Her videoya bir bağlantı sayfası hazırlayın; yorum yapanlara DM ile o sayfanın linki gider.</p>
         </div>
+        <div class="seg" role="group" aria-label="Gönderi filtresi">
+          <button type="button" data-pfilter="all" aria-pressed="true">Tümü</button>
+          <button type="button" data-pfilter="ready" aria-pressed="false">Sayfası olan</button>
+          <button type="button" data-pfilter="missing" aria-pressed="false">Sayfası olmayan</button>
+        </div>
+      </div>
+      <div class="posts" id="postsGrid"><div class="skeleton tall"></div><div class="skeleton tall"></div><div class="skeleton tall"></div></div>
+    </section>
+
+    <!-- Hareketler -->
+    <section class="panel" role="tabpanel" id="panel-activity" aria-labelledby="tab-activity" hidden>
+      <div class="panel-head">
+        <div><h2>Son hareketler</h2><p id="logsUpdated">Yükleniyor…</p></div>
         <div class="seg" role="group" aria-label="Hareket türü">
           <button type="button" data-filter="all" aria-pressed="true">Tümü</button>
           <button type="button" data-filter="comment" aria-pressed="false">Yorumlar</button>
@@ -283,118 +279,137 @@
       <div class="list" id="logsList" aria-live="polite"></div>
     </section>
 
-    <!-- Kurallar -->
-    <section class="panel" role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" hidden>
+    <!-- Mesaj ayarları -->
+    <section class="panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" hidden>
       <div class="panel-head">
-        <div>
-          <h2>Otomasyon kuralları</h2>
-          <p>Yorumda anahtar kelime geçerse: yoruma herkese açık yanıt yazılır ve kişiye DM gönderilir.</p>
-        </div>
-        <button class="btn btn-primary" type="button" id="newRuleBtn"><svg><use href="#i-plus"/></svg>Yeni kural</button>
+        <div><h2>Mesaj ayarları</h2><p>Bu metinler tüm gönderiler için ortaktır.</p></div>
       </div>
-
-      <div class="alert info" style="margin-bottom:16px">
-        <svg class="ico"><use href="#i-info"/></svg>
-        <div><b>Önemli:</b> Panelden yapılan kural değişiklikleri sunucunun geçici diskine kaydedilir.
-          Yeni bir sürüm yayınlandığında veya sunucu yeniden başladığında depodaki <code>rules.json</code> geri gelir.
-          Kalıcı olmasını istediğiniz değişiklikleri ekibe iletin.</div>
-      </div>
-
-      <div class="card tester">
-        <h3 style="font-size:16px;margin-bottom:4px">Bir yorumu dene</h3>
-        <p class="muted" style="margin:0 0 12px;font-size:14px">Örnek yorum yazın; hangi kuralın çalışacağını görün. Instagram'a hiçbir şey gönderilmez.</p>
-        <form id="testForm" class="tester-row">
-          <div><label class="field" for="testText">Örnek yorum</label><input class="input" id="testText" placeholder="ör. pdf linki atar mısınız?"></div>
-          <div><label class="field" for="testMedia">Gönderi</label><select class="input" id="testMedia"></select></div>
-          <button class="btn" type="submit">Dene</button>
-        </form>
-        <div class="tester-result" id="testResult" aria-live="polite"></div>
-      </div>
-
-      <div class="toolbar">
-        <label class="sr-only" for="ruleSearch">Kurallarda ara</label>
-        <input class="input" id="ruleSearch" type="search" placeholder="Kural adı veya anahtar kelime ara">
-      </div>
-      <div class="list" id="rulesList"></div>
-    </section>
-
-    <!-- AI talimatı -->
-    <section class="panel" role="tabpanel" id="panel-ai" aria-labelledby="tab-ai" hidden>
-      <div class="panel-head">
-        <div>
-          <h2>AI talimatı</h2>
-          <p>Hiçbir kurala uymayan yorumlara ve DM sohbetlerine yapay zekâ bu talimata göre yanıt verir.</p>
-        </div>
-      </div>
-      <div class="card" style="padding:16px">
-        <label class="field" for="promptInput">Sistem talimatı</label>
-        <textarea class="input prompt-area" id="promptInput" spellcheck="true"></textarea>
-        <div class="prompt-foot">
-          <span class="muted" id="promptMeta" aria-live="polite"></span>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn" type="button" id="promptReset" disabled>Değişiklikleri geri al</button>
-            <button class="btn btn-primary" type="button" id="promptSave" disabled>Kaydet</button>
+      <form id="settingsForm" novalidate>
+        <div class="settings-grid">
+          <div class="card set-card">
+            <h3>Yoruma yazılacak standart yanıt</h3>
+            <p>Gönderinize yorum yapan herkese, yorumunun altına bu cevap yazılır.</p>
+            <label class="field" for="sReply">Yanıt metni</label>
+            <input class="input" id="sReply" maxlength="300" required>
+            <p class="hint"><span id="sReplyCount">0</span>/300 · <code>{user}</code> yazarsanız yerine kişinin kullanıcı adı gelir.</p>
+            <div class="bubble"><b>Önizleme</b><span id="sReplyPrev"></span></div>
+          </div>
+          <div class="card set-card">
+            <h3>DM mesajı</h3>
+            <p>Yorum yapan kişiye özelden gider. <code>{link}</code> yazan yere o videonun sayfa linki eklenir.</p>
+            <label class="field" for="sDm">Mesaj</label>
+            <textarea class="input" id="sDm" rows="5" maxlength="900" required></textarea>
+            <p class="hint" id="sDmHint"></p>
+            <div class="bubble"><b>Önizleme</b><span id="sDmPrev"></span></div>
+          </div>
+          <div class="card set-card">
+            <h3>Genel kaynak sayfası</h3>
+            <p>Sayfası hazırlanmamış videolara yorum gelirse DM'de bu sayfanın linki gider. Aktif tüm video sayfalarını listeler.</p>
+            <label class="field" for="sGTitle">Sayfa başlığı</label>
+            <input class="input" id="sGTitle" maxlength="120">
+            <div style="height:12px"></div>
+            <label class="field" for="sGIntro">Kısa açıklama</label>
+            <textarea class="input" id="sGIntro" rows="3" maxlength="500"></textarea>
+            <p class="hint"><a id="sGLink" target="_blank" rel="noopener">Genel sayfayı aç <svg class="ico"><use href="#i-ext"/></svg></a></p>
+          </div>
+          <div class="card set-card">
+            <h3>Doğrudan gelen DM'ler (yapay zekâ)</h3>
+            <p>Biri size doğrudan mesaj yazarsa yapay zekâ bu talimata göre cevaplar ve gerekirse genel sayfa linkini verir.</p>
+            <label class="field" for="sAi">Yapay zekâ talimatı</label>
+            <textarea class="input" id="sAi" rows="6" maxlength="8000"></textarea>
           </div>
         </div>
-        <p class="hint">Not: Kurallardaki gibi bu talimat da geçici diske kaydedilir; yeni sürümde depodaki <code>system-prompt.txt</code> geri gelir.</p>
-      </div>
+        <div class="savebar">
+          <span class="muted" id="settingsDirty" aria-live="polite"></span>
+          <button class="btn" type="button" id="settingsReset" disabled>Değişiklikleri geri al</button>
+          <button class="btn btn-primary" type="submit" id="settingsSave" disabled>Kaydet</button>
+        </div>
+      </form>
     </section>
   </main>
 </div>
 
-<!-- Kural düzenleme -->
-<dialog id="ruleDialog" aria-labelledby="ruleDlgTitle">
-  <form id="ruleForm" method="dialog" novalidate>
+<!-- Sayfa düzenleyici -->
+<dialog id="pageDialog" aria-labelledby="pageDlgTitle">
+  <form id="pageForm" novalidate>
     <div class="dlg-head">
-      <h2 id="ruleDlgTitle">Yeni kural</h2>
+      <h2 id="pageDlgTitle">Video sayfası</h2>
       <button class="btn btn-ghost btn-icon" type="button" data-close aria-label="Kapat"><svg><use href="#i-x"/></svg></button>
     </div>
     <div class="dlg-body">
+      <div class="ed-head" id="edHead"></div>
+      <details class="more form-row" id="pImportWrap">
+        <summary>Hazır video dosyasından (JSON) doldur</summary>
+        <p class="hint" style="margin-top:0">Video için otomatik hazırlanan <code>NNN-ad.json</code> dosyasının içeriğini buraya yapıştırın; başlık, açıklama, promptlar, adımlar, ipucu ve linkler doldurulur. Kaydetmeden önce kontrol edebilirsiniz.</p>
+        <label class="sr-only" for="pImport">Video JSON içeriği</label>
+        <textarea class="input" id="pImport" rows="5" spellcheck="false" placeholder='{ "slug": "upscayl", "title": "…", "blocks": [ … ] }'></textarea>
+        <button class="btn" type="button" id="pImportBtn" style="margin-top:8px">Formu doldur</button>
+        <p class="err-text" id="pImportErr" hidden></p>
+      </details>
       <div class="form-row">
-        <label class="field" for="fName">Kural adı</label>
-        <input class="input" id="fName" required maxlength="120" placeholder="ör. Stirling PDF linki">
-        <p class="err-text" id="fNameErr" hidden>Kural adı gerekli.</p>
+        <label class="field" for="pTitle">Sayfa başlığı</label>
+        <input class="input" id="pTitle" maxlength="120" required placeholder="ör. Stirling PDF">
+        <p class="err-text" id="pTitleErr" hidden>Başlık gerekli.</p>
       </div>
       <div class="form-row">
-        <label class="field" for="fMedia">Hangi gönderide çalışsın?</label>
-        <select class="input" id="fMedia"></select>
-        <p class="hint" id="fMediaHint"></p>
-        <details class="more" id="fMediaManualWrap">
-          <summary>Gönderi kimliğini elle gir</summary>
-          <input class="input" id="fMediaManual" inputmode="numeric" placeholder="ör. 17917802667556092 (boş = tüm gönderiler)">
-        </details>
+        <label class="field" for="pSlug">Sayfa adresi</label>
+        <div class="prefix"><span id="pSlugBase"></span><input class="input" id="pSlug" maxlength="60" autocapitalize="off" spellcheck="false"></div>
+        <p class="hint">Takipçinin DM'de göreceği link. Başlıktan otomatik oluşur; isterseniz değiştirebilirsiniz.</p>
       </div>
       <div class="form-row">
-        <label class="field" for="fKeywords">Anahtar kelimeler</label>
-        <input class="input" id="fKeywords" placeholder="pdf, link, indir" aria-describedby="fKeywordsHint">
-        <p class="hint" id="fKeywordsHint">Virgülle ayırın. Yorumda bunlardan biri geçerse kural çalışır. Her yorum için <code>*</code> yazın.</p>
-        <div class="chips" id="fKeywordsPreview" aria-hidden="true"></div>
+        <label class="field" for="pBody">Açıklama</label>
+        <textarea class="input" id="pBody" rows="4" maxlength="2000" placeholder="Videoda anlattığınız aracı kısaca tanıtın."></textarea>
       </div>
       <div class="form-row">
-        <label class="field" for="fPublic">Yoruma yazılacak yanıtlar</label>
-        <textarea class="input" id="fPublic" rows="4" aria-describedby="fPublicHint"></textarea>
-        <p class="hint" id="fPublicHint">Her satıra bir yanıt yazın. Her yorumda rastgele biri seçilir; aynı cümlenin tekrarlanması spam sayılmasını önler. <code>{user}</code> kullanıcı adını ekler.</p>
+        <div class="field" id="pLinksLabel">Bağlantılar</div>
+        <div class="links-ed" id="pLinks" aria-labelledby="pLinksLabel"></div>
+        <button class="btn" type="button" id="pAddLink" style="margin-top:10px"><svg><use href="#i-plus"/></svg>Bağlantı ekle</button>
+        <p class="err-text" id="pLinksErr" hidden></p>
       </div>
+      <div class="form-row">
+        <div class="field" id="pPromptsLabel">Promptlar <span class="muted" style="font-weight:400">(takipçi “Kopyala” düğmesiyle alır)</span></div>
+        <div class="links-ed" id="pPrompts" aria-labelledby="pPromptsLabel"></div>
+        <button class="btn" type="button" id="pAddPrompt" style="margin-top:10px"><svg><use href="#i-plus"/></svg>Prompt ekle</button>
+      </div>
+      <div class="form-row">
+        <label class="field" for="pSteps">Adımlar <span class="muted" style="font-weight:400">(isteğe bağlı, her satıra bir adım)</span></label>
+        <textarea class="input" id="pSteps" rows="3" placeholder="Kurulumdan sonra fotoğrafını pencereye sürükle.&#10;Modeli seç."></textarea>
+      </div>
+      <div class="form-row">
+        <label class="field" for="pTip">İpucu <span class="muted" style="font-weight:400">(isteğe bağlı)</span></label>
+        <input class="input" id="pTip" maxlength="600" placeholder="ör. Çalışmazsa ayarlardan farklı bir GPU seç.">
+      </div>
+      <details class="more form-row" id="pAdvanced">
+        <summary>Gelişmiş: başka bir sayfaya yönlendir</summary>
+        <label class="field" for="pExternal">Harici sayfa adresi</label>
+        <input class="input" id="pExternal" type="url" inputmode="url" maxlength="500" placeholder="https://likyastudios.live/prompt/orgu-yemek">
+        <p class="hint">Doldurursanız DM'de bu video sayfası yerine bu adres gönderilir (ör. ana sitedeki prompt sayfası). Boş bırakın, panel sayfası kullanılsın.</p>
+      </details>
       <div class="form-row" style="margin-bottom:0">
-        <label class="field" for="fDm">DM ile gönderilecek mesaj</label>
-        <textarea class="input" id="fDm" rows="6" maxlength="1000" aria-describedby="fDmHint"></textarea>
-        <p class="hint" id="fDmHint"><span id="fDmCount">0</span>/1000 karakter. Linkleri buraya ekleyin.</p>
+        <button class="switch" type="button" role="switch" id="pActive" aria-checked="true"><span class="track" aria-hidden="true"></span><span id="pActiveLabel">Sayfa yayında</span></button>
+        <p class="hint">Yayında değilse bu videoya yorum yapanlara genel sayfanın linki gider.</p>
+        <div style="height:14px"></div>
+        <label class="field" for="pDmMsg">Bu gönderiye özel DM metni <span class="muted" style="font-weight:400">(isteğe bağlı)</span></label>
+        <textarea class="input" id="pDmMsg" rows="3" maxlength="900" placeholder="Boş bırakırsanız Mesaj ayarlarındaki ortak DM metni kullanılır. {link} yazan yere sayfa linki gelir."></textarea>
+        <div class="bubble"><b>Yorum yapan kişiye gidecek DM</b><span id="pDmPrev"></span></div>
       </div>
     </div>
     <div class="dlg-foot">
+      <button class="btn btn-danger" type="button" id="pDelete"><svg><use href="#i-trash"/></svg>Sayfayı kaldır</button>
+      <span class="spacer"></span>
       <button class="btn" type="button" data-close>Vazgeç</button>
-      <button class="btn btn-primary" type="submit" id="ruleSaveBtn">Kaydet</button>
+      <button class="btn btn-primary" type="submit" id="pSave">Kaydet</button>
     </div>
   </form>
 </dialog>
 
-<!-- Onay -->
 <dialog id="confirmDialog" aria-labelledby="confirmTitle">
   <div class="dlg-head"><h2 id="confirmTitle">Emin misiniz?</h2></div>
   <div class="dlg-body"><p id="confirmText" style="margin:0"></p></div>
   <div class="dlg-foot">
+    <span class="spacer"></span>
     <button class="btn" type="button" id="confirmNo">Vazgeç</button>
-    <button class="btn btn-primary" type="button" id="confirmYes" style="background:var(--err);border-color:var(--err)">Sil</button>
+    <button class="btn btn-primary" type="button" id="confirmYes" style="background:var(--err);border-color:var(--err)">Kaldır</button>
   </div>
 </dialog>
 
@@ -405,8 +420,8 @@
   "use strict";
   const PIN_KEY = "likya_admin_pin";
   const $ = (s, r = document) => r.querySelector(s);
-  const state = { pin: "", rules: [], logs: [], media: [], status: null, prompt: "", filter: "all",
-                  logsAt: null, editIndex: null };
+  const state = { mode: "pin", pin: "", email: "", status: null, posts: [], generalUrl: "", logs: [], settings: null,
+                  pfilter: "all", filter: "all", logsAt: null, editId: null, slugTouched: false };
 
   // ---------- Yardımcılar
   function el(tag, attrs = {}, ...kids) {
@@ -418,12 +433,12 @@
       else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v === true ? "" : v);
     }
-    for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) n.append(k.nodeType ? k : document.createTextNode(String(k)));
+    for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c.nodeType ? c : document.createTextNode(String(c)));
     return n;
   }
-  function icon(id, cls = "ico") {
+  function icon(id) {
     const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    s.setAttribute("class", cls); s.setAttribute("aria-hidden", "true");
+    s.setAttribute("class", "ico"); s.setAttribute("aria-hidden", "true");
     const u = document.createElementNS("http://www.w3.org/2000/svg", "use"); u.setAttribute("href", "#" + id);
     s.append(u); return s;
   }
@@ -433,416 +448,442 @@
   }
   function relTime(iso) {
     if (!iso) return "";
-    const d = new Date(iso); const s = Math.round((Date.now() - d) / 1000);
+    const s = Math.round((Date.now() - new Date(iso)) / 1000);
     if (isNaN(s)) return "";
     if (s < 45) return "az önce";
     if (s < 3600) return Math.round(s / 60) + " dk önce";
     if (s < 86400) return Math.round(s / 3600) + " sa önce";
-    return Math.round(s / 86400) + " gün önce";
+    if (s < 86400 * 30) return Math.round(s / 86400) + " gün önce";
+    return new Date(iso).toLocaleDateString("tr-TR");
   }
   const fullTime = iso => iso ? new Date(iso).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" }) : "";
-  const splitVariations = s => String(s || "").split("|").map(x => x.trim()).filter(Boolean);
-  const splitKeywords = s => String(s || "").split(",").map(x => x.trim()).filter(Boolean);
-  const isAll = id => !id || ["all", "*", ""].includes(String(id).trim());
+  const TR = { "ç": "c", "ğ": "g", "ı": "i", "ö": "o", "ş": "s", "ü": "u", "â": "a", "î": "i", "û": "u" };
+  const slugify = s => String(s || "").toLocaleLowerCase("tr-TR").replace(/[çğıöşüâîû]/g, c => TR[c]).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");
+  const renderDm = (tpl, link, title) => {
+    let t = (tpl || "").trim() || "Merhaba! İstediğin bağlantılar bu sayfada:\n{link}";
+    if (!t.includes("{link}")) t += "\n{link}";
+    return t.split("{link}").join(link).split("{title}").join(title || "");
+  };
 
   // ---------- API
   class AuthError extends Error {}
   async function api(path, opts = {}) {
-    const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Admin-Pin": state.pin, ...(opts.headers || {}) } });
-    if (res.status === 401) throw new AuthError("Şifre geçersiz.");
+    const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+    if (state.mode === "pin" && state.pin) headers["X-Admin-Pin"] = state.pin;
+    const res = await fetch(path, { credentials: "same-origin", ...opts, headers });
     let body = null; try { body = await res.json(); } catch (_) {}
+    if (res.status === 401) throw new AuthError((body && body.detail) || "Giriş gerekli.");
     if (!res.ok) throw new Error((body && body.detail) || ("Sunucu hatası (" + res.status + ")"));
     return body;
   }
-  function handleErr(e, fallback) {
-    if (e instanceof AuthError) { logout("Oturum süresi doldu veya şifre değişti. Lütfen tekrar giriş yapın."); return; }
-    toast((fallback ? fallback + ": " : "") + e.message, "err");
+  function handleErr(e, prefix) {
+    if (e instanceof AuthError) { showLogin("Oturumunuz sona erdi. Lütfen tekrar giriş yapın."); return; }
+    toast((prefix ? prefix + ": " : "") + e.message, "err");
   }
 
-  // ---------- Giriş / çıkış
-  function storedPin() {
-    try { return sessionStorage.getItem(PIN_KEY) || localStorage.getItem(PIN_KEY) || ""; } catch (_) { return ""; }
+  // ---------- Giriş
+  function showLoginError(msg) { const e = $("#loginErr"); e.hidden = !msg; e.textContent = msg || ""; }
+  function showLogin(msg) {
+    stopPolling();
+    $("#app").hidden = true; $("#login").hidden = false; $("#loginLoading").hidden = true;
+    showLoginError(msg || "");
+    if (state.mode === "google") { $("#loginGoogle").hidden = false; renderGoogleButton(); }
+    else { $("#loginPin").hidden = false; $("#pinInput").focus(); }
   }
-  function storePin(pin, remember) {
+  let gisLoaded = null;
+  function loadGis() {
+    if (!gisLoaded) gisLoaded = new Promise((ok, fail) => {
+      const s = el("script", { src: "https://accounts.google.com/gsi/client", async: true });
+      s.onload = ok; s.onerror = () => fail(new Error("Google giriş düğmesi yüklenemedi. İnternet bağlantınızı kontrol edin."));
+      document.head.append(s);
+    });
+    return gisLoaded;
+  }
+  async function renderGoogleButton() {
     try {
-      sessionStorage.setItem(PIN_KEY, pin);
-      if (remember) localStorage.setItem(PIN_KEY, pin); else localStorage.removeItem(PIN_KEY);
-    } catch (_) {}
+      await loadGis();
+      google.accounts.id.initialize({ client_id: state.clientId, callback: onGoogleCredential, auto_select: true, ux_mode: "popup" });
+      const box = $("#googleBtn"); box.replaceChildren();
+      google.accounts.id.renderButton(box, { theme: "outline", size: "large", text: "signin_with", shape: "pill", locale: "tr", width: 280 });
+    } catch (e) { showLoginError(e.message); }
   }
-  function clearPin() { try { sessionStorage.removeItem(PIN_KEY); localStorage.removeItem(PIN_KEY); } catch (_) {} }
-
-  async function tryLogin(pin, remember, silent) {
-    state.pin = pin;
-    const btn = $("#loginBtn"); btn.disabled = true; btn.textContent = "Kontrol ediliyor…";
+  async function onGoogleCredential(resp) {
+    showLoginError("");
     try {
-      state.status = await api("/api/status");
-      storePin(pin, remember);
-      $("#login").hidden = true; $("#app").hidden = false;
-      renderStatus(); loadAll(false);
-      startPolling();
-    } catch (e) {
-      clearPin(); state.pin = "";
-      if (!silent) {
-        const err = $("#pinErr"); err.hidden = false;
-        err.textContent = e instanceof AuthError ? "Şifre hatalı. Tekrar deneyin." : e.message;
-        $("#pinInput").focus(); $("#pinInput").select();
-      }
-    } finally { btn.disabled = false; btn.textContent = "Giriş yap"; }
+      const r = await api("/auth/google", { method: "POST", body: JSON.stringify({ credential: resp.credential }) });
+      state.email = r.email; await enterApp();
+    } catch (e) { showLoginError(e.message); }
   }
-  function logout(msg) {
-    clearPin(); state.pin = ""; stopPolling();
-    $("#app").hidden = true; $("#login").hidden = false;
-    const err = $("#pinErr"); err.hidden = !msg; err.textContent = msg || "";
-    $("#pinInput").value = ""; $("#pinInput").focus();
-  }
-  $("#loginForm").addEventListener("submit", e => {
+  $("#loginPin").addEventListener("submit", async e => {
     e.preventDefault();
-    const pin = $("#pinInput").value.trim();
-    if (!pin) { const err = $("#pinErr"); err.hidden = false; err.textContent = "Şifreyi yazın."; return; }
-    tryLogin(pin, $("#rememberPin").checked, false);
+    const pin = $("#pinInput").value.trim(); if (!pin) { showLoginError("Şifreyi yazın."); return; }
+    state.pin = pin; const b = $("#loginBtn"); b.disabled = true;
+    try { await enterApp(); try { sessionStorage.setItem(PIN_KEY, pin); } catch (_) {} }
+    catch (err) { state.pin = ""; showLoginError(err instanceof AuthError ? "Şifre hatalı." : err.message); }
+    finally { b.disabled = false; }
   });
-  $("#logoutBtn").addEventListener("click", () => logout(""));
-
-  // ---------- Veri yükleme
-  async function loadAll(announce) {
-    const results = await Promise.allSettled([loadRules(), loadLogs(), loadPrompt(), loadMedia()]);
-    try { state.status = await api("/api/status"); renderStatus(); } catch (e) { handleErr(e, "Durum alınamadı"); }
-    if (announce && results.every(r => r.status === "fulfilled")) toast("Veriler güncellendi");
+  async function enterApp() {
+    state.status = await api("/api/status");
+    $("#login").hidden = true; $("#app").hidden = false;
+    $("#whoami").textContent = state.mode === "google" ? (state.status.user + " · @likyastudios") : "@likyastudios";
+    renderStatus(); loadAll(false); startPolling();
   }
-  async function loadRules() {
-    try { state.rules = await api("/api/rules"); renderRules(); }
-    catch (e) { handleErr(e, "Kurallar yüklenemedi"); renderRulesError(e); throw e; }
+  $("#logoutBtn").addEventListener("click", async () => {
+    try { if (state.mode === "google") { await api("/auth/logout", { method: "POST" }); if (window.google) google.accounts.id.disableAutoSelect(); } } catch (_) {}
+    try { sessionStorage.removeItem(PIN_KEY); localStorage.removeItem(PIN_KEY); } catch (_) {}
+    state.pin = ""; showLogin("Çıkış yapıldı.");
+  });
+
+  async function boot() {
+    try {
+      const s = await api("/api/session");
+      state.mode = s.mode; state.clientId = s.client_id;
+      if (s.mode === "google" && s.email) { state.email = s.email; await enterApp(); return; }
+      if (s.mode === "pin") {
+        let saved = ""; try { saved = sessionStorage.getItem(PIN_KEY) || localStorage.getItem(PIN_KEY) || ""; } catch (_) {}
+        if (saved) { state.pin = saved; try { await enterApp(); return; } catch (_) { state.pin = ""; } }
+      }
+      showLogin("");
+    } catch (e) { $("#loginLoading").textContent = "Sunucuya ulaşılamadı: " + e.message; }
+  }
+
+  // ---------- Veri
+  async function loadAll(announce, fresh) {
+    const results = await Promise.allSettled([loadPosts(fresh), loadLogs(), loadSettings()]);
+    try { state.status = await api("/api/status"); renderStatus(); } catch (e) { handleErr(e, "Durum alınamadı"); }
+    if (announce && results.every(r => r.status === "fulfilled")) toast("Güncellendi");
+  }
+  async function loadPosts(fresh) {
+    try { const r = await api("/api/posts" + (fresh ? "?fresh=1" : "")); state.posts = r.posts; state.generalUrl = r.general_url; state.mediaError = r.media_error; renderPosts(); }
+    catch (e) { handleErr(e, "Gönderiler yüklenemedi"); renderPostsError(e); throw e; }
   }
   async function loadLogs() {
     try { state.logs = await api("/api/logs"); state.logsAt = new Date(); renderLogs(); }
     catch (e) { handleErr(e, "Hareketler yüklenemedi"); throw e; }
   }
-  async function loadPrompt() {
-    try { const r = await api("/api/prompt"); state.prompt = r.prompt || ""; $("#promptInput").value = state.prompt; updatePromptMeta(); }
-    catch (e) { handleErr(e, "AI talimatı yüklenemedi"); throw e; }
-  }
-  async function loadMedia() {
-    try { state.media = await api("/api/media") || []; }
-    catch (e) { state.media = []; if (e instanceof AuthError) handleErr(e); }
-    fillMediaSelect($("#testMedia"), "", true); renderRules();
+  async function loadSettings() {
+    try { state.settings = await api("/api/settings"); fillSettings(); }
+    catch (e) { handleErr(e, "Ayarlar yüklenemedi"); throw e; }
   }
   $("#refreshAll").addEventListener("click", async () => {
     const b = $("#refreshAll"); b.disabled = true;
-    try { await loadAll(true); } finally { b.disabled = false; }
+    try { await loadAll(true, true); } finally { b.disabled = false; }
   });
-
   let pollTimer = null;
   function startPolling() {
     stopPolling();
     pollTimer = setInterval(async () => {
-      if (document.hidden || !state.pin) return;
-      try {
-        state.logs = await api("/api/logs"); state.logsAt = new Date(); renderLogs();
-        state.status = await api("/api/status"); renderStatus();
-      } catch (e) { if (e instanceof AuthError) handleErr(e); }
+      if (document.hidden) return;
+      try { state.logs = await api("/api/logs"); state.logsAt = new Date(); renderLogs(); state.status = await api("/api/status"); renderStatus(); }
+      catch (e) { if (e instanceof AuthError) handleErr(e); }
     }, 15000);
   }
   function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
-  setInterval(() => { if (state.logsAt) updateLogsUpdated(); }, 30000);
 
-  // ---------- Durum kartları
-  function statCard(title, pillText, pillKind, value, sub) {
+  // ---------- Durum
+  function statCard(title, pillText, kind, value, sub) {
     return el("div", { class: "card stat" },
-      el("div", { class: "stat-head" }, el("span", { text: title }), el("span", { class: "pill " + pillKind, text: pillText })),
-      el("div", { class: "stat-value", text: value }),
-      sub ? el("div", { class: "stat-sub", text: sub }) : null);
+      el("div", { class: "stat-head" }, el("span", { text: title }), el("span", { class: "pill " + kind, text: pillText })),
+      el("div", { class: "stat-value", text: value }), sub ? el("div", { class: "stat-sub", text: sub }) : null);
   }
   function renderStatus() {
     const s = state.status; if (!s) return;
-    const ig = s.instagram, wh = s.webhook, ai = s.ai;
-    let igCard;
-    if (!ig.token_set) igCard = statCard("Instagram bağlantısı", "Bağlı değil", "err", "Erişim anahtarı yok", "IG_PAGE_ACCESS_TOKEN ayarlanmamış; yanıt ve DM gönderilemez.");
-    else if (ig.media_ok === false) igCard = statCard("Instagram bağlantısı", "Hata", "err", "Meta API yanıt vermedi", ig.media_error || "Erişim anahtarının süresi dolmuş olabilir.");
-    else if (ig.media_ok === true) igCard = statCard("Instagram bağlantısı", "Bağlı", "ok", "Gönderiler okunabiliyor", "Son kontrol: " + relTime(ig.media_checked_at));
-    else igCard = statCard("Instagram bağlantısı", "Kontrol ediliyor", "plain", "Anahtar tanımlı", "Gönderi listesi henüz çekilmedi.");
-
-    let whPill, whKind, whVal, whSub;
-    if (wh.last_event_at) { whPill = "Olay alınıyor"; whKind = "ok"; whVal = "Son olay " + relTime(wh.last_event_at); whSub = wh.events + " olay · sunucu açılışı " + relTime(s.started_at); }
-    else { whPill = "Beklemede"; whKind = "plain"; whVal = "Henüz olay yok"; whSub = "Sunucu " + relTime(s.started_at) + " başladı. Meta bir yorum/DM gönderdiğinde burada görünür."; }
-    if (wh.rejected) { whSub += " · " + wh.rejected + " istek imza hatasıyla reddedildi"; if (!wh.last_event_at) { whKind = "warn"; whPill = "Reddedilen istek"; } }
-    const whCard = statCard("Webhook (Meta bildirimleri)", whPill, whKind, whVal, whSub);
-
-    const aiCard = ai.key_set
-      ? statCard("Yapay zekâ", "Açık", "ok", ai.model, "Kurala uymayan yorum ve DM'leri yanıtlar.")
-      : statCard("Yapay zekâ", "Kapalı", "warn", "Anahtar yok", "GEMINI_API_KEY ayarlanmamış; sabit teşekkür mesajı gönderiliyor.");
-    const r = s.rules;
-    const ruleCard = statCard("Kurallar", r.active ? r.active + " aktif" : "Aktif kural yok", r.active ? "ok" : "warn",
-      r.total + " kural tanımlı", r.total - r.active ? (r.total - r.active) + " kural pasif" : "Tümü çalışıyor");
-
-    $("#statusGrid").replaceChildren(igCard, whCard, aiCard, ruleCard);
+    const ig = s.instagram, wh = s.webhook;
+    const igCard = !ig.token_set ? statCard("Instagram", "Bağlı değil", "err", "Erişim anahtarı yok", "Yanıt ve DM gönderilemez.")
+      : ig.media_ok === false ? statCard("Instagram", "Hata", "err", "Meta API yanıt vermedi", ig.media_error || "Erişim anahtarının süresi dolmuş olabilir.")
+      : ig.media_ok === true ? statCard("Instagram", "Bağlı", "ok", "Gönderiler okunuyor", "Son kontrol: " + relTime(ig.media_checked_at))
+      : statCard("Instagram", "Kontrol ediliyor", "plain", "Anahtar tanımlı", "");
+    const whCard = wh.last_event_at
+      ? statCard("Yorum/DM bildirimleri", "Geliyor", "ok", "Son bildirim " + relTime(wh.last_event_at), wh.events + " bildirim (sunucu açılışından beri)")
+      : statCard("Yorum/DM bildirimleri", wh.rejected ? "Reddedilen var" : "Beklemede", wh.rejected ? "warn" : "plain", "Henüz bildirim yok",
+                 "Sunucu " + relTime(s.started_at) + " başladı. Yeni yorum gelince burada görünür.");
+    const st = s.storage;
+    const stCard = st.error ? statCard("Kayıt", "Hata", "err", "Depoya erişilemiyor", st.error)
+      : st.backend === "gcs" ? statCard("Kayıt", "Kalıcı", "ok", "Değişiklikler saklanıyor", "Google Cloud Storage")
+      : statCard("Kayıt", "Geçici", "warn", "Yerel dosya", "Sunucu yeniden başlarsa değişiklikler kaybolabilir.");
+    const p = s.pages;
+    const pgCard = statCard("Video sayfaları", p.active ? p.active + " yayında" : "Sayfa yok", p.active ? "ok" : "warn", p.total + " sayfa", "Sayfası olmayan videolarda genel sayfa gider.");
+    $("#statusGrid").replaceChildren(igCard, whCard, stCard, pgCard);
 
     const alerts = [];
-    if (s.security.admin_pin_is_default) alerts.push(["err", "Varsayılan yönetim şifresi kullanılıyor.", "Bu şifre kodda ve eski sürümde herkese açık görünüyordu. Sunucuda ADMIN_PIN ayarını güçlü bir şifreyle değiştirin."]);
-    if (!wh.signature_check) alerts.push(["warn", "Webhook imza doğrulaması kapalı.", "IG_APP_SECRET ayarlanmamış; Meta'dan gelmeyen sahte bildirimler de işlenebilir. Meta uygulamanızın “App Secret” değerini ekleyin."]);
-    if (wh.verify_token_is_default) alerts.push(["warn", "Webhook doğrulama anahtarı varsayılan değerde.", "IG_VERIFY_TOKEN değerini size özel bir metinle değiştirmeniz önerilir."]);
-    $("#alerts").replaceChildren(...alerts.map(([k, t, p]) =>
-      el("div", { class: "alert " + k, role: k === "err" ? "alert" : null }, icon(k === "info" ? "i-info" : "i-alert"), el("div", {}, el("b", { text: t }), el("p", { text: p })))));
-    $("#cntRules").textContent = r.total;
+    if (s.security.admin_pin_is_default) alerts.push(["err", "Varsayılan yönetim şifresi kullanılıyor.", "Google ile giriş ayarlandığında bu şifre kendiliğinden devre dışı kalır."]);
+    if (!wh.signature_check) alerts.push(["warn", "Bildirim imza kontrolü kapalı.", "IG_APP_SECRET ayarlanmamış; Meta'dan gelmeyen sahte bildirimler de işlenebilir."]);
+    if (!s.public_base_configured) alerts.push(["info", "Takipçi sayfaları geçici adreste.", "link.likyastudios.live bağlanınca DM'lerdeki linkler otomatik olarak o adrese geçer. Şu an: " + s.public_base]);
+    $("#alerts").replaceChildren(...alerts.map(([k, t, d]) => el("div", { class: "alert " + k }, icon(k === "info" ? "i-info" : "i-alert"), el("div", {}, el("b", { text: t }), el("p", { text: d })))));
   }
 
-  // ---------- Hareketler
-  function logKind(l) { return l.kind || (String(l.type || "").toUpperCase().startsWith("DM") ? "dm" : "comment"); }
-  function okPill(label, ok) {
-    if (ok === undefined || ok === null) return null;
-    return el("span", { class: "pill " + (ok ? "ok" : "err"), text: label + (ok ? " gönderildi" : " gönderilemedi") });
+  // ---------- Gönderiler
+  function renderPostsError(e) {
+    $("#postsGrid").replaceChildren(el("div", { class: "card empty", style: "grid-column:1/-1" }, el("h3", { text: "Gönderiler yüklenemedi" }), el("p", { text: e.message }),
+      el("button", { class: "btn", type: "button", style: "margin-top:12px", onclick: () => loadPosts(true).catch(() => {}) }, "Tekrar dene")));
   }
-  function updateLogsUpdated() {
-    const s = state.status;
-    $("#logsUpdated").textContent = "Son güncelleme " + state.logsAt.toLocaleTimeString("tr-TR") + " · her 15 sn'de yenilenir" +
-      (s ? " · son " + s.logs.capacity + " kayıt tutulur" : "");
+  function postStatus(p) {
+    if (!p.page) return el("span", { class: "pill warn", text: "Sayfa yok · genel sayfa gider" });
+    if (p.page.is_active === false) return el("span", { class: "pill plain", text: "Sayfa yayında değil" });
+    return el("span", { class: "pill ok", text: "Sayfa hazır" + (p.page.dm_message ? " · özel DM" : " · ortak DM") });
   }
-  function renderLogs() {
-    $("#cntLogs").textContent = state.logs.length;
-    if (state.logsAt) updateLogsUpdated();
-    const list = $("#logsList");
-    const items = state.logs.slice().reverse().filter(l => state.filter === "all" || logKind(l) === state.filter);
-    if (!state.logs.length) {
-      list.replaceChildren(el("div", { class: "card empty" },
-        el("h3", { text: "Henüz hareket yok" }),
-        el("p", { text: "Biri gönderinize yorum yaptığında veya DM attığında burada görünecek. Kayıtlar sunucu belleğinde tutulur; sunucu uyku moduna geçip yeniden başladığında liste sıfırlanır." })));
+  function renderPosts() {
+    $("#cntPosts").textContent = state.posts.filter(p => !p.older).length;
+    const items = state.posts.filter(p => state.pfilter === "all" || (state.pfilter === "ready" ? !!p.page : !p.page));
+    const grid = $("#postsGrid");
+    if (!state.posts.length) {
+      grid.replaceChildren(el("div", { class: "card empty", style: "grid-column:1/-1" }, el("h3", { text: "Gönderi bulunamadı" }),
+        el("p", { text: state.mediaError ? "Instagram'dan gönderiler alınamadı: " + state.mediaError : "Instagram hesabınızda henüz gönderi yok." })));
       return;
     }
-    if (!items.length) { list.replaceChildren(el("div", { class: "card empty" }, el("h3", { text: "Bu filtrede kayıt yok" }), el("p", { text: "Başka bir filtre seçin." }))); return; }
-    list.replaceChildren(...items.map(l => {
-      const kind = logKind(l);
-      const rule = l.rule || String(l.matched_rule || "").replace(/[✅❌⚠️]|Yorum OK|DM OK/g, "").trim();
-      const head = el("div", { class: "item-head" },
-        el("span", { class: "tag " + kind, text: kind === "dm" ? "DM" : "Yorum" }),
-        el("span", { class: "item-user", text: l.user || "Bilinmeyen kullanıcı" }),
-        el("time", { class: "item-time", datetime: l.at || null, title: fullTime(l.at) || null, text: l.at ? relTime(l.at) : (l.time ? l.time + " (UTC)" : "") }));
-      const body = [el("p", { class: "quote", text: l.input || "" })];
-      if (kind === "comment" && l.public_reply !== undefined) {
-        body.push(el("div", { class: "reply-block" }, el("div", { class: "reply-label", text: "Yoruma yanıt" }), el("p", { class: "reply-text", text: l.public_reply })));
-        body.push(el("details", { class: "more" }, el("summary", { text: "Gönderilen DM'i göster" }), el("p", { class: "reply-text", text: l.dm_reply || "" })));
-      } else if (kind === "dm" && l.dm_reply !== undefined) {
-        body.push(el("div", { class: "reply-block" }, el("div", { class: "reply-label", text: "DM yanıtı" }), el("p", { class: "reply-text", text: l.dm_reply })));
-      } else {
-        body.push(el("div", { class: "reply-block" }, el("div", { class: "reply-label", text: "Yanıt" }), el("p", { class: "reply-text", text: l.reply || "" })));
-      }
-      const foot = el("div", { class: "item-foot" },
-        el("span", { class: "chip", text: rule || "—" }),
-        kind === "comment" ? okPill("Yorum", l.comment_ok) : null,
-        okPill("DM", l.dm_ok));
-      return el("article", { class: "card item" }, head, ...body, foot);
+    if (!items.length) { grid.replaceChildren(el("div", { class: "card empty", style: "grid-column:1/-1" }, el("h3", { text: "Bu filtrede gönderi yok" }))); return; }
+    grid.replaceChildren(...items.map(p => {
+      const img = p.thumb ? el("img", { class: "post-thumb", src: p.thumb, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })
+                          : el("div", { class: "post-thumb ph", text: p.older ? "Eski gönderi" : "Görsel yok" });
+      const date = p.timestamp ? fullTime(p.timestamp) : (p.older ? "Son gönderiler arasında değil" : "");
+      return el("article", { class: "card post" }, img,
+        el("div", { class: "post-body" },
+          el("div", {}, postStatus(p)),
+          el("div", { class: "post-title", text: (p.page && p.page.title) || p.title }),
+          el("div", { class: "post-meta", text: [p.media_type === "VIDEO" ? "Video" : p.media_type === "CAROUSEL_ALBUM" ? "Albüm" : p.media_type ? "Fotoğraf" : "", date].filter(Boolean).join(" · ") }),
+          p.page_url && p.page ? el("a", { class: "post-link", href: p.page_url, target: "_blank", rel: "noopener" }, p.page_url.replace(/^https?:\/\//, ""), " ", icon("i-ext")) : null,
+          el("div", { class: "post-actions" },
+            el("button", { class: "btn " + (p.page ? "" : "btn-primary"), type: "button", onclick: () => openPage(p.id) }, icon(p.page ? "i-edit" : "i-plus"), p.page ? "Sayfayı düzenle" : "Sayfa oluştur"),
+            p.permalink ? el("a", { class: "btn btn-icon", href: p.permalink, target: "_blank", rel: "noopener", "aria-label": "Gönderiyi Instagram'da aç", title: "Instagram'da aç" }, icon("i-ext")) : null)));
     }));
   }
-  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
-    state.filter = b.dataset.filter;
-    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
-    renderLogs();
+  document.querySelectorAll("[data-pfilter]").forEach(b => b.addEventListener("click", () => {
+    state.pfilter = b.dataset.pfilter;
+    document.querySelectorAll("[data-pfilter]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    renderPosts();
   }));
 
-  // ---------- Kurallar
-  function mediaById(id) { return state.media.find(m => m.id === String(id)); }
-  function mediaLabel(id) {
-    if (isAll(id)) return "Tüm gönderiler";
-    const m = mediaById(id);
-    return m ? m.title : "Gönderi " + id;
+  // ---------- Sayfa düzenleyici
+  const dlg = $("#pageDialog");
+  function linkRow(link = { label: "", url: "", note: "" }) {
+    const row = el("div", { class: "link-row" },
+      el("div", { class: "fields" },
+        el("input", { class: "input l-label", placeholder: "Bağlantı adı (ör. İndir)", maxlength: "80", "aria-label": "Bağlantı adı", value: link.label || "" }),
+        el("input", { class: "input l-url", placeholder: "https://…", type: "url", inputmode: "url", maxlength: "500", "aria-label": "Bağlantı adresi", value: link.url || "" }),
+        el("input", { class: "input l-note", placeholder: "Kısa not (isteğe bağlı, ör. Windows ve Mac için)", maxlength: "120", "aria-label": "Bağlantı notu", value: link.note || "", style: "grid-column:1/-1" })),
+      el("button", { class: "btn btn-icon btn-danger", type: "button", "aria-label": "Bu bağlantıyı kaldır", onclick: () => { row.remove(); updateDmPreview(); } }, icon("i-trash")));
+    return row;
   }
-  function fillMediaSelect(select, selected, withAllLabel) {
-    const opts = [el("option", { value: "all", text: "Tüm gönderiler (genel)" })];
-    state.media.forEach(m => {
-      const date = m.timestamp ? new Date(m.timestamp).toLocaleDateString("tr-TR") + " · " : "";
-      opts.push(el("option", { value: m.id, text: date + m.title }));
-    });
-    if (selected && !isAll(selected) && !mediaById(selected)) opts.push(el("option", { value: selected, text: "Gönderi " + selected + " (listede yok)" }));
-    select.replaceChildren(...opts);
-    select.value = isAll(selected) ? "all" : selected;
+  function promptRow(pr = { label: "", tool: "", text: "" }) {
+    const row = el("div", { class: "link-row" },
+      el("div", { class: "fields" },
+        el("input", { class: "input pr-label", placeholder: "Başlık (ör. Görsel promptu)", maxlength: "100", "aria-label": "Prompt başlığı", value: pr.label || "" }),
+        el("input", { class: "input pr-tool", placeholder: "Nerede kullanılır (ör. Gemini'de, dikey 9:16)", maxlength: "100", "aria-label": "Promptun kullanılacağı yer", value: pr.tool || "" }),
+        el("textarea", { class: "input pr-text", rows: "4", maxlength: "4000", placeholder: "Prompt metni", "aria-label": "Prompt metni", style: "grid-column:1/-1" }, pr.text || "")),
+      el("button", { class: "btn btn-icon btn-danger", type: "button", "aria-label": "Bu promptu kaldır", onclick: () => row.remove() }, icon("i-trash")));
+    return row;
   }
-  function renderRulesError(e) {
-    $("#rulesList").replaceChildren(el("div", { class: "card empty" }, el("h3", { text: "Kurallar yüklenemedi" }), el("p", { text: e.message }),
-      el("button", { class: "btn", type: "button", style: "margin-top:12px", onclick: () => loadRules().catch(() => {}) }, "Tekrar dene")));
-  }
-  function renderRules() {
-    $("#cntRules").textContent = state.rules.length;
-    const q = ($("#ruleSearch").value || "").toLocaleLowerCase("tr-TR").trim();
-    const list = $("#rulesList");
-    if (!state.rules.length) {
-      list.replaceChildren(el("div", { class: "card empty" }, el("h3", { text: "Henüz kural yok" }),
-        el("p", { text: "İlk kuralınızı ekleyin: örneğin “pdf” yazan herkese indirme linkini DM ile gönderin." }),
-        el("button", { class: "btn btn-primary", type: "button", style: "margin-top:14px", onclick: () => openRule(null) }, icon("i-plus"), "Yeni kural")));
-      return;
-    }
-    const rows = state.rules.map((r, i) => ({ r, i })).filter(({ r }) =>
-      !q || (r.name + " " + r.keywords + " " + mediaLabel(r.media_id)).toLocaleLowerCase("tr-TR").includes(q));
-    if (!rows.length) { list.replaceChildren(el("div", { class: "card empty" }, el("h3", { text: "Eşleşen kural yok" }), el("p", { text: "Aramayı değiştirin." }))); return; }
-    list.replaceChildren(...rows.map(({ r, i }) => {
-      const variations = splitVariations(r.public_reply);
-      const kws = splitKeywords(r.keywords);
-      const m = mediaById(r.media_id);
-      const active = r.is_active !== false;
-      const sw = el("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(active),
-        "aria-label": r.name + " kuralı " + (active ? "aktif" : "pasif"), onclick: () => toggleRule(i) },
-        el("span", { class: "track", "aria-hidden": "true" }), el("span", { text: active ? "Aktif" : "Pasif" }));
-      return el("article", { class: "card rule" + (active ? "" : " off") },
-        el("div", { class: "rule-top" },
-          el("div", { style: "min-width:0" },
-            el("h3", { class: "rule-title", text: r.name }),
-            el("div", { class: "rule-meta" },
-              el("span", { class: "pill plain", text: isAll(r.media_id) ? "Tüm gönderiler" : "Tek gönderi" }),
-              el("span", { class: "pill plain", text: variations.length + " yanıt çeşidi" }),
-              r.dm_message ? el("span", { class: "pill plain", text: "DM var" }) : el("span", { class: "pill warn", text: "DM boş" }))),
-          sw),
-        !isAll(r.media_id) ? el("p", { class: "muted", style: "margin:10px 0 0;font-size:14px;overflow-wrap:anywhere" },
-          m && m.permalink ? el("a", { href: m.permalink, target: "_blank", rel: "noopener" }, mediaLabel(r.media_id), " ", icon("i-ext")) : mediaLabel(r.media_id)) : null,
-        el("div", { class: "chips", "aria-label": "Anahtar kelimeler" },
-          ...(kws.length && !["*", "hepsi", "all"].includes(String(r.keywords).trim()) ? kws.map(k => el("span", { class: "chip", text: k })) : [el("span", { class: "chip", text: "Her yorum" })])),
-        el("details", { class: "more" }, el("summary", { text: "Yanıtları göster" }),
-          el("div", { class: "reply-label", text: "Yoruma yanıtlar" }),
-          el("ul", { style: "margin:4px 0 12px;padding-left:20px" }, ...variations.map(v => el("li", { text: v }))),
-          el("div", { class: "reply-label", text: "DM mesajı" }),
-          el("p", { class: "quote", text: r.dm_message || "—" })),
-        el("div", { class: "rule-actions" },
-          el("button", { class: "btn", type: "button", onclick: () => openRule(i) }, icon("i-edit"), "Düzenle"),
-          el("button", { class: "btn btn-danger", type: "button", onclick: () => deleteRule(i) }, icon("i-trash"), "Sil")));
-    }));
-  }
-  $("#ruleSearch").addEventListener("input", renderRules);
+  $("#pAddPrompt").addEventListener("click", () => {
+    if ($("#pPrompts").children.length >= 12) { toast("En fazla 12 prompt eklenebilir.", "err"); return; }
+    const r = promptRow(); $("#pPrompts").append(r); r.querySelector(".pr-label").focus();
+  });
+  $("#pExternal").addEventListener("input", () => updateDmPreview());
+  $("#pDmMsg").addEventListener("input", () => updateDmPreview());
 
-  async function saveRules(next, okMsg) {
-    const saved = await api("/api/rules", { method: "POST", body: JSON.stringify({ rules: next }) });
-    state.rules = next; renderRules();
-    try { state.status = await api("/api/status"); renderStatus(); } catch (_) {}
-    toast(okMsg); return saved;
+  // Ana sitedeki video dosyası şeması: { slug, title, excerpt, blocks: [h2|p|prompt|link|steps|tip] }
+  function importVideoJson(text) {
+    let d; try { d = JSON.parse(text); } catch (_) { throw new Error("Bu metin geçerli bir JSON değil. Dosyanın tamamını kopyaladığınızdan emin olun."); }
+    if (!d || typeof d !== "object" || !Array.isArray(d.blocks)) throw new Error("Dosyada “blocks” listesi bulunamadı.");
+    const body = [], prompts = [], links = [], steps = []; let tip = "", section = "";
+    if (d.excerpt) body.push(String(d.excerpt));
+    for (const b of d.blocks) {
+      if (!b || typeof b !== "object") continue;
+      if (b.type === "h2") section = String(b.text || "").trim();
+      else if (b.type === "p" && b.text) body.push(String(b.text));
+      else if (b.type === "prompt" && b.text) prompts.push({ label: [section, b.label].filter(Boolean).join(" — "), tool: b.tool || "", text: String(b.text) });
+      else if (b.type === "link" && b.url) links.push({ label: b.label || "", url: b.url, note: b.note || "" });
+      else if (b.type === "steps" && Array.isArray(b.items)) steps.push(...b.items.map(String));
+      else if (b.type === "tip" && b.text) tip = tip ? tip + " " + b.text : String(b.text);
+    }
+    if (d.title) $("#pTitle").value = String(d.title);
+    if (d.slug) { $("#pSlug").value = slugify(d.slug); state.slugTouched = true; }
+    $("#pBody").value = body.join("\n\n");
+    $("#pPrompts").replaceChildren(...prompts.map(p => promptRow(p)));
+    $("#pLinks").replaceChildren(...(links.length ? links : [{}]).map(l => linkRow(l)));
+    $("#pSteps").value = steps.join("\n");
+    $("#pTip").value = tip;
+    updateDmPreview();
+    return prompts.length + " prompt, " + links.length + " link, " + steps.length + " adım aktarıldı";
   }
-  async function toggleRule(i) {
-    const next = state.rules.map((r, j) => j === i ? { ...r, is_active: !(r.is_active !== false) } : r);
-    try { await saveRules(next, next[i].is_active ? "Kural etkinleştirildi" : "Kural durduruldu"); }
-    catch (e) { handleErr(e, "Kaydedilemedi"); }
+  $("#pImportBtn").addEventListener("click", () => {
+    const err = $("#pImportErr");
+    try { const msg = importVideoJson($("#pImport").value); err.hidden = true; $("#pImportWrap").open = false; $("#pImport").value = ""; toast(msg + ". Kontrol edip kaydedin."); $("#pTitle").focus(); }
+    catch (e) { err.hidden = false; err.textContent = e.message; }
+  });
+  function currentLink() {
+    const ext = $("#pExternal").value.trim();
+    if (ext && $("#pActive").getAttribute("aria-checked") === "true") return ext;
+    const base = state.status ? state.status.public_base : state.generalUrl;
+    const slug = slugify($("#pSlug").value) || slugify($("#pTitle").value);
+    return $("#pActive").getAttribute("aria-checked") === "true" && slug ? base + "/" + slug : base;
   }
+  function updateDmPreview() {
+    const s = state.settings || {};
+    $("#pDmPrev").textContent = renderDm($("#pDmMsg").value.trim() || s.dm_template, currentLink(), $("#pTitle").value);
+  }
+  function setActive(on) {
+    $("#pActive").setAttribute("aria-checked", String(on));
+    $("#pActiveLabel").textContent = on ? "Sayfa yayında" : "Sayfa yayında değil";
+    updateDmPreview();
+  }
+  function openPage(id) {
+    const post = state.posts.find(p => p.id === id); if (!post) return;
+    state.editId = id;
+    const page = post.page || { title: post.title.replace(/[#@].*$/, "").trim().slice(0, 80), slug: "", body: "", links: [], is_active: true };
+    $("#pageDlgTitle").textContent = post.page ? "Sayfayı düzenle" : "Yeni video sayfası";
+    $("#edHead").replaceChildren(
+      post.thumb ? el("img", { src: post.thumb, alt: "", referrerpolicy: "no-referrer" }) : el("span", { class: "ph" }),
+      el("div", { style: "min-width:0" }, el("div", { style: "font-weight:700;overflow-wrap:anywhere", text: post.title }),
+        el("div", { class: "muted", style: "font-size:13px", text: post.timestamp ? fullTime(post.timestamp) : "Gönderi " + id })));
+    $("#pTitle").value = page.title; $("#pTitleErr").hidden = true;
+    $("#pSlugBase").textContent = ((state.status && state.status.public_base) || state.generalUrl).replace(/^https?:\/\//, "") + "/";
+    $("#pSlug").value = page.slug || slugify(page.title); state.slugTouched = !!post.page;
+    $("#pBody").value = page.body || "";
+    const links = $("#pLinks"); links.replaceChildren(...((page.links || []).length ? page.links : [{}]).map(l => linkRow(l)));
+    $("#pPrompts").replaceChildren(...(page.prompts || []).map(p => promptRow(p)));
+    $("#pSteps").value = (page.steps || []).join("\n");
+    $("#pTip").value = page.tip || "";
+    $("#pDmMsg").value = page.dm_message || "";
+    $("#pExternal").value = page.external_url || ""; $("#pAdvanced").open = !!page.external_url;
+    $("#pLinksErr").hidden = true; $("#pImportErr").hidden = true; $("#pImport").value = ""; $("#pImportWrap").open = !post.page;
+    $("#pDelete").hidden = !post.page;
+    setActive(page.is_active !== false);
+    dlg.showModal(); $("#pTitle").focus();
+  }
+  $("#pTitle").addEventListener("input", () => { if (!state.slugTouched) $("#pSlug").value = slugify($("#pTitle").value); updateDmPreview(); });
+  $("#pSlug").addEventListener("input", () => { state.slugTouched = true; updateDmPreview(); });
+  $("#pSlug").addEventListener("blur", () => { $("#pSlug").value = slugify($("#pSlug").value); });
+  $("#pActive").addEventListener("click", () => setActive($("#pActive").getAttribute("aria-checked") !== "true"));
+  $("#pAddLink").addEventListener("click", () => {
+    if ($("#pLinks").children.length >= 15) { toast("En fazla 15 bağlantı eklenebilir.", "err"); return; }
+    const r = linkRow(); $("#pLinks").append(r); r.querySelector(".l-label").focus();
+  });
+  dlg.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => dlg.close()));
+  $("#pageForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const title = $("#pTitle").value.trim();
+    if (!title) { $("#pTitleErr").hidden = false; $("#pTitle").focus(); return; }
+    const links = [...$("#pLinks").children].map(r => ({ label: r.querySelector(".l-label").value.trim(), url: r.querySelector(".l-url").value.trim(), note: r.querySelector(".l-note").value.trim() }))
+      .filter(l => l.label || l.url);
+    const prompts = [...$("#pPrompts").children].map(r => ({ label: r.querySelector(".pr-label").value.trim(), tool: r.querySelector(".pr-tool").value.trim(), text: r.querySelector(".pr-text").value.trim() }))
+      .filter(p => p.text);
+    const ext = $("#pExternal").value.trim();
+    if (ext && !/^https?:\/\/[^\s]+\.[^\s]+/i.test(ext)) { $("#pAdvanced").open = true; toast("Harici sayfa adresi https:// ile başlamalı.", "err"); $("#pExternal").focus(); return; }
+    const bad = links.find(l => !/^https?:\/\/[^\s]+\.[^\s]+/i.test(l.url));
+    if (bad) { const er = $("#pLinksErr"); er.hidden = false; er.textContent = "“" + (bad.label || bad.url || "Bağlantı") + "” için geçerli bir adres yazın (https:// ile başlamalı)."; return; }
+    $("#pLinksErr").hidden = true;
+    const body = { title, slug: slugify($("#pSlug").value) || slugify(title), body: $("#pBody").value.trim(), links, prompts,
+                   steps: $("#pSteps").value.split("\n").map(s => s.trim()).filter(Boolean), tip: $("#pTip").value.trim(),
+                   external_url: ext, dm_message: $("#pDmMsg").value.trim(), is_active: $("#pActive").getAttribute("aria-checked") === "true" };
+    const b = $("#pSave"); b.disabled = true; b.textContent = "Kaydediliyor…";
+    try {
+      await api("/api/pages/" + encodeURIComponent(state.editId), { method: "PUT", body: JSON.stringify(body) });
+      dlg.close(); toast("Sayfa kaydedildi"); await loadPosts(false); refreshStatus();
+    } catch (err) { handleErr(err, "Kaydedilemedi"); }
+    finally { b.disabled = false; b.textContent = "Kaydet"; }
+  });
   function confirmBox(text) {
     return new Promise(resolve => {
       const d = $("#confirmDialog"); $("#confirmText").textContent = text;
       const done = v => { d.close(); resolve(v); };
-      $("#confirmYes").onclick = () => done(true); $("#confirmNo").onclick = () => done(false);
-      d.oncancel = () => resolve(false);
+      $("#confirmYes").onclick = () => done(true); $("#confirmNo").onclick = () => done(false); d.oncancel = () => resolve(false);
       d.showModal(); $("#confirmNo").focus();
     });
   }
-  async function deleteRule(i) {
-    if (!(await confirmBox("“" + state.rules[i].name + "” kuralı silinecek. Bu işlem geri alınamaz."))) return;
-    try { await saveRules(state.rules.filter((_, j) => j !== i), "Kural silindi"); }
-    catch (e) { handleErr(e, "Silinemedi"); }
-  }
+  $("#pDelete").addEventListener("click", async () => {
+    dlg.close();
+    if (!(await confirmBox("Bu videonun sayfası kaldırılacak. Bundan sonra bu videoya yorum yapanlara genel sayfanın linki gider."))) { dlg.showModal(); return; }
+    try { await api("/api/pages/" + encodeURIComponent(state.editId), { method: "DELETE" }); toast("Sayfa kaldırıldı"); await loadPosts(false); refreshStatus(); }
+    catch (err) { handleErr(err, "Kaldırılamadı"); }
+  });
+  async function refreshStatus() { try { state.status = await api("/api/status"); renderStatus(); } catch (_) {} }
 
-  // Kural formu
-  const dlg = $("#ruleDialog");
-  function renderKwPreview() {
-    const kws = splitKeywords($("#fKeywords").value);
-    $("#fKeywordsPreview").replaceChildren(...kws.map(k => el("span", { class: "chip", text: k })));
+  // ---------- Hareketler
+  const logKind = l => l.kind || (String(l.type || "").toUpperCase().startsWith("DM") ? "dm" : "comment");
+  const okPill = (label, ok) => (ok === undefined || ok === null) ? null : el("span", { class: "pill " + (ok ? "ok" : "err"), text: label + (ok ? " gönderildi" : " gönderilemedi") });
+  function renderLogs() {
+    $("#cntLogs").textContent = state.logs.length;
+    if (state.logsAt) $("#logsUpdated").textContent = "Son güncelleme " + state.logsAt.toLocaleTimeString("tr-TR") + " · her 15 sn'de yenilenir · son 50 kayıt";
+    const list = $("#logsList");
+    if (!state.logs.length) {
+      list.replaceChildren(el("div", { class: "card empty" }, el("h3", { text: "Henüz hareket yok" }),
+        el("p", { text: "Biri gönderinize yorum yaptığında veya DM attığında burada görünür. Bu liste sunucu belleğindedir; sunucu yeniden başlayınca sıfırlanır." })));
+      return;
+    }
+    const items = state.logs.slice().reverse().filter(l => state.filter === "all" || logKind(l) === state.filter);
+    if (!items.length) { list.replaceChildren(el("div", { class: "card empty" }, el("h3", { text: "Bu filtrede kayıt yok" }))); return; }
+    list.replaceChildren(...items.map(l => {
+      const kind = logKind(l);
+      const parts = [
+        el("div", { class: "item-head" },
+          el("span", { class: "tag " + kind, text: kind === "dm" ? "DM" : "Yorum" }),
+          el("span", { class: "item-user", text: l.user || "Bilinmeyen kullanıcı" }),
+          el("time", { class: "item-time", datetime: l.at || null, title: fullTime(l.at) || null, text: l.at ? relTime(l.at) : (l.time || "") })),
+        el("p", { class: "quote", text: l.input || "" })];
+      if (kind === "comment") {
+        parts.push(el("div", { class: "reply-label", text: "Yoruma yanıt" }), el("p", { class: "reply-text", text: l.public_reply || "" }));
+        parts.push(el("details", { class: "more" }, el("summary", { text: "Gönderilen DM'i göster" }), el("p", { class: "reply-text", text: l.dm_reply || "" })));
+      } else {
+        parts.push(el("div", { class: "reply-label", text: "DM yanıtı" }), el("p", { class: "reply-text", text: l.dm_reply || l.reply || "" }));
+      }
+      parts.push(el("div", { class: "item-foot" }, el("span", { class: "chip", text: l.rule || "—" }), kind === "comment" ? okPill("Yanıt", l.comment_ok) : null, okPill("DM", l.dm_ok)));
+      return el("article", { class: "card item" }, ...parts);
+    }));
   }
-  function updateMediaHint() {
-    const v = $("#fMedia").value; const m = mediaById(v);
-    const hint = $("#fMediaHint"); hint.replaceChildren();
-    if (!state.media.length) hint.append(state.status && state.status.instagram.media_ok === false
-      ? "Instagram gönderileri şu an yüklenemiyor. Gönderi kimliğini aşağıdan elle girebilirsiniz."
-      : "Gönderi listesi boş. Gerekirse kimliği elle girin.");
-    else if (m && m.permalink) hint.append(el("a", { href: m.permalink, target: "_blank", rel: "noopener" }, "Gönderiyi Instagram'da aç ", icon("i-ext")));
-    else if (v === "all") hint.append("Kural, belirli bir gönderiye ait kural yoksa tüm gönderilerde çalışır.");
+  document.querySelectorAll("[data-filter]").forEach(b => b.addEventListener("click", () => {
+    state.filter = b.dataset.filter;
+    document.querySelectorAll("[data-filter]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    renderLogs();
+  }));
+
+  // ---------- Mesaj ayarları
+  const SFIELDS = { sReply: "public_reply", sDm: "dm_template", sGTitle: "general_title", sGIntro: "general_intro", sAi: "ai_prompt" };
+  function fillSettings() {
+    for (const [id, key] of Object.entries(SFIELDS)) $("#" + id).value = state.settings[key] || "";
+    $("#sGLink").href = (state.status && state.status.public_base) || state.generalUrl || "/p";
+    updateSettingsUi();
   }
-  function openRule(i) {
-    state.editIndex = i;
-    const r = i === null ? { name: "", media_id: "all", keywords: "", public_reply: "Harika! İstediğiniz bağlantıyı DM kutunuza ilettik ✨ | Selamlar! Linki DM üzerinden gönderdik 🚀", dm_message: "" } : state.rules[i];
-    $("#ruleDlgTitle").textContent = i === null ? "Yeni kural" : "Kuralı düzenle";
-    $("#fName").value = r.name || ""; $("#fNameErr").hidden = true;
-    fillMediaSelect($("#fMedia"), r.media_id);
-    $("#fMediaManual").value = ""; $("#fMediaManualWrap").open = !state.media.length;
-    $("#fKeywords").value = r.keywords === "*" ? "*" : (r.keywords || "");
-    $("#fPublic").value = splitVariations(r.public_reply).join("\n");
-    $("#fDm").value = r.dm_message || ""; $("#fDmCount").textContent = $("#fDm").value.length;
-    renderKwPreview(); updateMediaHint();
-    dlg.showModal(); $("#fName").focus();
+  function settingsDirty() { return state.settings && Object.entries(SFIELDS).some(([id, key]) => $("#" + id).value !== (state.settings[key] || "")); }
+  function updateSettingsUi() {
+    const reply = $("#sReply").value, dm = $("#sDm").value;
+    $("#sReplyCount").textContent = reply.length;
+    $("#sReplyPrev").textContent = reply.split("{user}").join("@ornek_kullanici") || "—";
+    const sample = state.posts.find(p => p.page && p.page.is_active !== false);
+    const link = sample ? sample.page_url : ((state.status && state.status.public_base) || state.generalUrl);
+    $("#sDmPrev").textContent = renderDm(dm, link, sample ? sample.page.title : "");
+    $("#sDmHint").textContent = dm.includes("{link}") ? "Link, {link} yazan yere eklenecek." : "Metinde {link} yok; link mesajın sonuna eklenecek.";
+    const dirty = settingsDirty();
+    $("#settingsDirty").textContent = dirty ? "Kaydedilmemiş değişiklik var" : "";
+    $("#settingsSave").disabled = !dirty || !reply.trim() || !dm.trim();
+    $("#settingsReset").disabled = !dirty;
   }
-  $("#newRuleBtn").addEventListener("click", () => openRule(null));
-  $("#fKeywords").addEventListener("input", renderKwPreview);
-  $("#fMedia").addEventListener("change", updateMediaHint);
-  $("#fDm").addEventListener("input", () => { $("#fDmCount").textContent = $("#fDm").value.length; });
-  dlg.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => dlg.close()));
-  $("#ruleForm").addEventListener("submit", async e => {
+  Object.keys(SFIELDS).forEach(id => $("#" + id).addEventListener("input", updateSettingsUi));
+  $("#settingsReset").addEventListener("click", fillSettings);
+  $("#settingsForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const name = $("#fName").value.trim();
-    if (!name) { $("#fNameErr").hidden = false; $("#fName").focus(); return; }
-    const manual = $("#fMediaManual").value.trim();
-    const prev = state.editIndex === null ? null : state.rules[state.editIndex];
-    const rule = {
-      id: prev ? prev.id : "rule_" + Date.now(),
-      name,
-      media_id: manual || $("#fMedia").value || "all",
-      keywords: $("#fKeywords").value.trim() || "*",
-      public_reply: $("#fPublic").value.split("\n").map(x => x.replace(/\|/g, "/").trim()).filter(Boolean).join(" | "),
-      dm_message: $("#fDm").value.trim(),
-      is_active: prev ? prev.is_active !== false : true,
-    };
-    const next = state.rules.slice();
-    if (prev) next[state.editIndex] = rule; else next.unshift(rule);
-    const btn = $("#ruleSaveBtn"); btn.disabled = true; btn.textContent = "Kaydediliyor…";
-    try { await saveRules(next, prev ? "Kural güncellendi" : "Kural eklendi"); dlg.close(); }
-    catch (err) { handleErr(err, "Kaydedilemedi"); }
-    finally { btn.disabled = false; btn.textContent = "Kaydet"; }
+    const body = {}; for (const [id, key] of Object.entries(SFIELDS)) body[key] = $("#" + id).value.trim();
+    const b = $("#settingsSave"); b.disabled = true;
+    try { await api("/api/settings", { method: "POST", body: JSON.stringify(body) }); toast("Ayarlar kaydedildi"); await loadSettings(); }
+    catch (err) { handleErr(err, "Kaydedilemedi"); updateSettingsUi(); }
   });
+  window.addEventListener("beforeunload", e => { if (settingsDirty()) { e.preventDefault(); e.returnValue = ""; } });
 
-  // Kural testi
-  $("#testForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    const text = $("#testText").value.trim(); const out = $("#testResult");
-    if (!text) { out.replaceChildren(el("p", { class: "err-text", text: "Önce örnek bir yorum yazın." })); $("#testText").focus(); return; }
-    try {
-      const media = $("#testMedia").value;
-      const r = await api("/api/test-match", { method: "POST", body: JSON.stringify({ text, media_id: media === "all" ? "" : media }) });
-      if (r.matched) out.replaceChildren(el("div", { class: "alert info" }, icon("i-info"), el("div", {},
-        el("b", { text: "“" + r.rule.name + "” kuralı çalışır." }),
-        el("p", { text: "Yoruma şu yanıtlardan biri yazılır: " + splitVariations(r.rule.public_reply).join(" / ") }))));
-      else out.replaceChildren(el("div", { class: "alert warn" }, icon("i-alert"), el("div", {},
-        el("b", { text: "Hiçbir kural eşleşmedi." }),
-        el("p", { text: state.status && state.status.ai.key_set ? "Bu yorumu yapay zekâ yanıtlar." : "Yapay zekâ kapalı olduğu için sabit bir teşekkür mesajı gönderilir." }))));
-    } catch (err) { handleErr(err, "Test yapılamadı"); }
-  });
-
-  // ---------- AI talimatı
-  function updatePromptMeta() {
-    const v = $("#promptInput").value; const dirty = v !== state.prompt;
-    $("#promptMeta").textContent = v.length + " karakter" + (dirty ? " · kaydedilmemiş değişiklik var" : "");
-    $("#promptSave").disabled = !dirty || !v.trim(); $("#promptReset").disabled = !dirty;
-  }
-  $("#promptInput").addEventListener("input", updatePromptMeta);
-  $("#promptReset").addEventListener("click", () => { $("#promptInput").value = state.prompt; updatePromptMeta(); });
-  $("#promptSave").addEventListener("click", async () => {
-    const v = $("#promptInput").value; const b = $("#promptSave"); b.disabled = true;
-    try { await api("/api/prompt", { method: "POST", body: JSON.stringify({ prompt: v }) }); state.prompt = v.trim(); $("#promptInput").value = state.prompt; toast("AI talimatı kaydedildi"); }
-    catch (e) { handleErr(e, "Kaydedilemedi"); }
-    finally { updatePromptMeta(); }
-  });
-  window.addEventListener("beforeunload", e => { if (state.pin && $("#promptInput").value !== state.prompt) { e.preventDefault(); e.returnValue = ""; } });
-
-  // ---------- Sekmeler (ok tuşlarıyla gezilebilir)
+  // ---------- Sekmeler
   const tabs = [...document.querySelectorAll('[role="tab"]')];
   function selectTab(t, focus) {
-    tabs.forEach(x => {
-      const on = x === t; x.setAttribute("aria-selected", String(on)); x.tabIndex = on ? 0 : -1;
-      document.getElementById(x.getAttribute("aria-controls")).hidden = !on;
-    });
+    tabs.forEach(x => { const on = x === t; x.setAttribute("aria-selected", String(on)); x.tabIndex = on ? 0 : -1; document.getElementById(x.getAttribute("aria-controls")).hidden = !on; });
     if (focus) t.focus();
     try { history.replaceState(null, "", "#" + t.id.replace("tab-", "")); } catch (_) {}
   }
   tabs.forEach((t, i) => {
     t.addEventListener("click", () => selectTab(t));
     t.addEventListener("keydown", e => {
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-        const n = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]; selectTab(n, true); e.preventDefault();
-      }
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") { selectTab(tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length], true); e.preventDefault(); }
     });
   });
   const initial = tabs.find(t => "#" + t.id.replace("tab-", "") === location.hash); if (initial) selectTab(initial);
 
-  // ---------- Başlat
-  const saved = storedPin();
-  try { $("#rememberPin").checked = !!localStorage.getItem(PIN_KEY); } catch (_) {}
-  if (saved) tryLogin(saved, $("#rememberPin").checked, true); else $("#pinInput").focus();
+  boot();
 })();
 </script>
 </body>

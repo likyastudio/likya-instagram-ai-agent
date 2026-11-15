@@ -324,7 +324,10 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
 
     public_reply = (settings.get("public_reply") or "Teşekkürler! Bağlantıları DM kutunuza gönderdik 📩")
     public_reply = public_reply.replace("{user}", f"@{username}" if username else "")
-    dm_reply = render_dm(settings.get("dm_template", ""), link, page["title"] if page else settings.get("general_title", ""))
+    # Gönderiye özel DM metni varsa o, yoksa ortak DM metni kullanılır
+    template = (page.get("dm_message") or "").strip() if page else ""
+    dm_reply = render_dm(template or settings.get("dm_template", ""), link,
+                         page["title"] if page else settings.get("general_title", ""))
 
     comment_ok = await reply_to_comment(comment_id, public_reply)
     dm_ok = await send_private_reply(comment_id, dm_reply)
@@ -500,7 +503,8 @@ def _clean_page(raw: dict) -> dict:
         raise HTTPException(status_code=422, detail="Harici sayfa adresi https:// ile başlamalı.")
     return {"title": title, "slug": slug, "body": str(raw.get("body") or "").strip()[:2000],
             "links": links, "prompts": prompts, "steps": steps, "tip": str(raw.get("tip") or "").strip()[:600],
-            "external_url": external, "is_active": bool(raw.get("is_active", True)), "updated_at": _now_iso()}
+            "external_url": external, "dm_message": str(raw.get("dm_message") or "").strip()[:900],
+            "is_active": bool(raw.get("is_active", True)), "updated_at": _now_iso()}
 
 
 @app.put("/api/pages/{media_id}")

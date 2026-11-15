@@ -340,3 +340,14 @@ def test_webhook_with_invalid_encoding_returns_400():
     raw = '{"object":"instagram","entry":[{"text":"ğ"}]}'.encode("cp1254")
     sig = "sha256=" + hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
     assert client.post("/webhook", content=raw, headers={"X-Hub-Signature-256": sig}).status_code == 400
+
+
+def test_per_post_dm_message_overrides_shared_template(outbox):
+    client.put("/api/pages/18121864655327295", headers=PIN, json={
+        "title": "Örgü", "slug": "orgu-yemek", "dm_message": "Örgü promptların burada 🧶 {link}"})
+    post_comment()
+    post_comment(cid="c2", media="17917802667556092")   # özel metni olmayan gönderi
+    assert outbox["private"][0][1] == f"Örgü promptların burada 🧶 {BASE}/orgu-yemek"
+    assert outbox["private"][1][1] != outbox["private"][0][1] and f"{BASE}/stirling-pdf" in outbox["private"][1][1]
+    # yorum yanıtı iki gönderide de aynı standart metin
+    assert outbox["replies"][0][1] == outbox["replies"][1][1]

@@ -388,6 +388,9 @@
       <div class="form-row" style="margin-bottom:0">
         <button class="switch" type="button" role="switch" id="pActive" aria-checked="true"><span class="track" aria-hidden="true"></span><span id="pActiveLabel">Sayfa yayında</span></button>
         <p class="hint">Yayında değilse bu videoya yorum yapanlara genel sayfanın linki gider.</p>
+        <div style="height:14px"></div>
+        <label class="field" for="pDmMsg">Bu gönderiye özel DM metni <span class="muted" style="font-weight:400">(isteğe bağlı)</span></label>
+        <textarea class="input" id="pDmMsg" rows="3" maxlength="900" placeholder="Boş bırakırsanız Mesaj ayarlarındaki ortak DM metni kullanılır. {link} yazan yere sayfa linki gelir."></textarea>
         <div class="bubble"><b>Yorum yapan kişiye gidecek DM</b><span id="pDmPrev"></span></div>
       </div>
     </div>
@@ -617,7 +620,7 @@
   function postStatus(p) {
     if (!p.page) return el("span", { class: "pill warn", text: "Sayfa yok · genel sayfa gider" });
     if (p.page.is_active === false) return el("span", { class: "pill plain", text: "Sayfa yayında değil" });
-    return el("span", { class: "pill ok", text: "Sayfa hazır · " + (p.page.links || []).length + " bağlantı" });
+    return el("span", { class: "pill ok", text: "Sayfa hazır" + (p.page.dm_message ? " · özel DM" : " · ortak DM") });
   }
   function renderPosts() {
     $("#cntPosts").textContent = state.posts.filter(p => !p.older).length;
@@ -675,6 +678,7 @@
     const r = promptRow(); $("#pPrompts").append(r); r.querySelector(".pr-label").focus();
   });
   $("#pExternal").addEventListener("input", () => updateDmPreview());
+  $("#pDmMsg").addEventListener("input", () => updateDmPreview());
 
   // Ana sitedeki video dosyası şeması: { slug, title, excerpt, blocks: [h2|p|prompt|link|steps|tip] }
   function importVideoJson(text) {
@@ -715,7 +719,7 @@
   }
   function updateDmPreview() {
     const s = state.settings || {};
-    $("#pDmPrev").textContent = renderDm(s.dm_template, currentLink(), $("#pTitle").value);
+    $("#pDmPrev").textContent = renderDm($("#pDmMsg").value.trim() || s.dm_template, currentLink(), $("#pTitle").value);
   }
   function setActive(on) {
     $("#pActive").setAttribute("aria-checked", String(on));
@@ -739,6 +743,7 @@
     $("#pPrompts").replaceChildren(...(page.prompts || []).map(p => promptRow(p)));
     $("#pSteps").value = (page.steps || []).join("\n");
     $("#pTip").value = page.tip || "";
+    $("#pDmMsg").value = page.dm_message || "";
     $("#pExternal").value = page.external_url || ""; $("#pAdvanced").open = !!page.external_url;
     $("#pLinksErr").hidden = true; $("#pImportErr").hidden = true; $("#pImport").value = ""; $("#pImportWrap").open = !post.page;
     $("#pDelete").hidden = !post.page;
@@ -769,7 +774,7 @@
     $("#pLinksErr").hidden = true;
     const body = { title, slug: slugify($("#pSlug").value) || slugify(title), body: $("#pBody").value.trim(), links, prompts,
                    steps: $("#pSteps").value.split("\n").map(s => s.trim()).filter(Boolean), tip: $("#pTip").value.trim(),
-                   external_url: ext, is_active: $("#pActive").getAttribute("aria-checked") === "true" };
+                   external_url: ext, dm_message: $("#pDmMsg").value.trim(), is_active: $("#pActive").getAttribute("aria-checked") === "true" };
     const b = $("#pSave"); b.disabled = true; b.textContent = "Kaydediliyor…";
     try {
       await api("/api/pages/" + encodeURIComponent(state.editId), { method: "PUT", body: JSON.stringify(body) });

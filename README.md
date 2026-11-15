@@ -21,7 +21,7 @@
 
 ## Panel
 
-- **Gönderiler:** Instagram'daki gönderiler kendiliğinden listelenir. Her videoya sayfa oluşturulur/düzenlenir.
+- **Gönderiler:** Instagram'daki gönderiler kendiliğinden listelenir. Her videoya sayfa ve isteğe bağlı gönderiye özel DM metni tanımlanır (boşsa ortak DM metni).
   Hazır video JSON dosyası (`{slug, title, excerpt, blocks:[h2|p|prompt|link|steps|tip]}`) yapıştırılarak form doldurulabilir.
   "Harici sayfa adresi" doldurulursa DM bu adresi gönderir.
 - **Hareketler:** Son 50 yorum/DM ve gönderim durumu (bellekte; sunucu yeniden başlayınca sıfırlanır).

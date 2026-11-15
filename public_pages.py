@@ -25,7 +25,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 ui-sans-serif,
 a{color:var(--accent)}:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:10px}
 .wrap{max-width:600px;margin:0 auto;padding:16px 16px 40px}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-weight:700;margin-bottom:16px;min-height:44px}
-.mark{width:36px;height:36px;border-radius:10px;background:var(--fill);color:#fff;display:grid;place-items:center;font-weight:800}
+.mark{width:40px;height:40px;border-radius:50%;display:block;flex:none;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 4px 18px rgba(28,25,23,.06)}
 .hero{display:flex;gap:14px;align-items:center;padding:14px}
 .hero img{width:84px;height:105px;border-radius:12px;object-fit:cover;flex:none;background:var(--line)}
@@ -95,9 +95,16 @@ def safe_url(url: str) -> str | None:
     return None
 
 
+def asset_root(base_url: str) -> str:
+    """Logo gibi dosyaların kök adresi (ör. https://link.likyastudios.live veya servis adresi)."""
+    return base_url[:-2] if base_url.endswith("/p") else base_url
+
+
 def _shell(title: str, description: str, inner: str, image: str | None = None, canonical: str | None = None,
-           script: str = "") -> str:
-    og_img = f'<meta property="og:image" content="{escape(image)}">' if image else ""
+           script: str = "", root: str = "") -> str:
+    image = image or (f"{root}/brand/og.png" if root else None)
+    og_img = (f'<meta property="og:image" content="{escape(image)}"><meta name="twitter:card" content="summary_large_image">'
+              if image else "")
     canon = f'<link rel="canonical" href="{escape(canonical)}">' if canonical else ""
     return f"""<!DOCTYPE html>
 <html lang="tr"><head>
@@ -108,9 +115,11 @@ def _shell(title: str, description: str, inner: str, image: str | None = None, c
 <meta property="og:title" content="{escape(title)}"><meta property="og:description" content="{escape(description[:160])}">
 <meta property="og:site_name" content="{SITE_NAME}">{og_img}{canon}
 <meta name="referrer" content="no-referrer">
+<link rel="icon" href="{root}/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="{root}/brand/logo-192.png">
+<link rel="apple-touch-icon" href="{root}/brand/logo-192.png">
 <style>{CSS}</style>
 </head><body><main class="wrap">
-<a class="brand" href="{SITE_URL}"><span class="mark" aria-hidden="true">L</span>{SITE_NAME}</a>
+<a class="brand" href="{SITE_URL}"><img class="mark" src="{root}/brand/logo-96.png" alt="" width="40" height="40">{SITE_NAME}</a>
 {inner}
 <p class="foot"><a href="{SITE_URL}">likyastudios.live</a> · <a href="https://www.instagram.com/likyastudios/">Instagram'da takip et</a></p>
 </main>{script}</body></html>"""
@@ -166,7 +175,8 @@ def render_video_page(page: dict, thumb: str | None, base_url: str, index_url: s
         sections.append(f'<h2>Bağlantılar</h2>{links}')
     sections.append(f'<p class="foot" style="margin-top:22px"><a href="{escape(index_url)}">Diğer videoların kaynakları →</a></p>')
     return _shell(f"{title} — {SITE_NAME}", body or title, "\n".join(sections), image=thumb,
-                  canonical=f"{base_url}/{page.get('slug', '')}", script=COPY_JS if prompts else "")
+                  canonical=f"{base_url}/{page.get('slug', '')}", script=COPY_JS if prompts else "",
+                  root=asset_root(base_url))
 
 
 def render_index(title: str, intro: str, items: list[dict], base_url: str) -> str:
@@ -189,10 +199,11 @@ def render_index(title: str, intro: str, items: list[dict], base_url: str) -> st
     inner = f"""<h1>{escape(title)}</h1>
 {f'<p class="lead" style="margin-bottom:18px">{escape(intro)}</p>' if intro else '<div style="height:16px"></div>'}
 {listing}"""
-    return _shell(title, intro or title, inner, canonical=base_url)
+    return _shell(title, intro or title, inner, canonical=base_url, root=asset_root(base_url))
 
 
 def render_not_found(index_url: str) -> str:
+    root = asset_root(index_url)
     inner = (f'<div class="card empty"><h1>Sayfa bulunamadı</h1><p>Bu bağlantı kaldırılmış olabilir.</p>'
              f'<p><a href="{escape(index_url)}">Tüm video kaynaklarına git</a></p></div>')
-    return _shell(f"Sayfa bulunamadı — {SITE_NAME}", "Sayfa bulunamadı", inner)
+    return _shell(f"Sayfa bulunamadı — {SITE_NAME}", "Sayfa bulunamadı", inner, root=root)

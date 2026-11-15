@@ -1,262 +1,342 @@
+import asyncio
 import hashlib
 import hmac
 import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
-import app as ig_module
-from app import app, valid_signature, find_matching_rule
-
+import app as ig
+import auth
+import public_pages
+from app import app, valid_signature
+from store import DataStore
 
 client = TestClient(app)
-PIN = {"X-Admin-Pin": ig_module.ADMIN_PIN}
+PIN = {"X-Admin-Pin": ig.ADMIN_PIN}
+SECRET = "test_app_secret_12345"
+BASE = "https://link.likyastudios.live"
 
 
 @pytest.fixture(autouse=True)
-def isolated_files(tmp_path, monkeypatch):
-    """Testler depodaki gerçek rules.json / system-prompt.txt dosyalarının üzerine yazmasın."""
-    rules_copy = tmp_path / "rules.json"
-    rules_copy.write_text(ig_module.RULES_FILE.read_text(encoding="utf-8"), encoding="utf-8")
-    prompt_copy = tmp_path / "system-prompt.txt"
-    prompt_copy.write_text(ig_module.PROMPT_FILE.read_text(encoding="utf-8"), encoding="utf-8")
-    monkeypatch.setattr(ig_module, "RULES_FILE", rules_copy)
-    monkeypatch.setattr(ig_module, "PROMPT_FILE", prompt_copy)
-    ig_module.PIN_FAILURES.clear()
+def isolated(tmp_path, monkeypatch):
+    """Her test temiz, yerel bir veri deposu ve PIN modu ile başlar."""
+    monkeypatch.setattr(ig, "STORE", DataStore("", "x.json", tmp_path / "data.json", ig._load_seed()))
+    monkeypatch.setattr(ig, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(ig, "PUBLIC_BASE_URL", BASE)
+    monkeypatch.setattr(ig, "IG_APP_SECRET", SECRET)
+    ig.PIN_FAILURES.clear()
+    ig.RECENT_LOGS.clear()
+    ig.SEEN_EVENT_IDS.clear()
+    ig.MEDIA_CACHE.update(at=0.0, items=[])
     yield
 
 
-def test_dashboard_endpoint():
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "Likya Studios" in response.text
-    assert "text/html" in response.headers["content-type"]
+def signed(payload: dict) -> tuple[bytes, dict]:
+    raw = json.dumps(payload).encode()
+    return raw, {"X-Hub-Signature-256": "sha256=" + hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()}
 
 
-def test_health_endpoint():
-    response = client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
+def comment_payload(cid="c1", text="link lütfen", media="18121864655327295", user="ayse"):
+    return {"object": "instagram", "entry": [{"id": "1", "time": 1, "changes": [{"field": "comments", "value": {
+        "id": cid, "text": text, "from": {"id": "u1", "username": user}, "media": {"id": media}}}]}]}
 
 
-def test_webhook_verify_success():
-    token = ig_module.IG_VERIFY_TOKEN
-    response = client.get(f"/webhook?hub.mode=subscribe&hub.verify_token={token}&hub.challenge=ig_challenge_777")
-    assert response.status_code == 200
-    assert response.text == "ig_challenge_777"
+# ---------------------------------------------------------------- Temel uç noktalar
+
+def test_dashboard_shell_has_no_private_data():
+    ig.RECENT_LOGS.append({"user": "gizli_kullanici", "input": "<img src=x onerror=alert(1)>"})
+    html = client.get("/").text
+    assert "Likya Studios" in html
+    assert "gizli_kullanici" not in html and "onerror=alert(1)" not in html and "likya2026" not in html
 
 
-def test_webhook_verify_invalid_token():
-    response = client.get("/webhook?hub.mode=subscribe&hub.verify_token=wrong_token&hub.challenge=test")
-    assert response.status_code == 403
+def test_health():
+    assert client.get("/health").json()["status"] == "ok"
+
+
+def test_webhook_verify():
+    ok = client.get(f"/webhook?hub.mode=subscribe&hub.verify_token={ig.IG_VERIFY_TOKEN}&hub.challenge=777")
+    assert ok.status_code == 200 and ok.text == "777"
+    assert client.get("/webhook?hub.mode=subscribe&hub.verify_token=x&hub.challenge=1").status_code == 403
 
 
 def test_signature_validation():
-    secret = "test_app_secret_12345"
-    ig_module.IG_APP_SECRET = secret
     body = b'{"object": "instagram"}'
-
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    valid_header = f"sha256={expected}"
-
-    assert valid_signature(body, valid_header) is True
-    assert valid_signature(body, "sha256=invalidhash") is False
+    good = "sha256=" + hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
+    assert valid_signature(body, good) is True
+    assert valid_signature(body, "sha256=bad") is False
 
 
-def test_rules_api():
-    # GET rules
-    res = client.get("/api/rules", headers=PIN)
-    assert res.status_code == 200
-    rules = res.json()
-    assert isinstance(rules, list)
-
-    # POST new rule
-    new_rules = [
-        {
-            "id": "test_rule_1",
-            "name": "Özel Test Kuralı",
-            "media_id": "all",
-            "keywords": "katalog, test",
-            "public_reply": "Katalog DM'de!",
-            "dm_message": "İşte kataloğunuz: https://likyastudios.com/katalog",
-            "is_active": True,
-        }
-    ]
-    res_post = client.post("/api/rules", json=new_rules, headers=PIN)
-    assert res_post.status_code == 200
-    assert res_post.json()["count"] == 1
+def test_webhook_rejected_signature_is_counted():
+    before = ig.STATS["webhook_rejected"]
+    assert client.post("/webhook", content=b"{}", headers={"X-Hub-Signature-256": "sha256=bad"}).status_code == 401
+    assert ig.STATS["webhook_rejected"] == before + 1
 
 
-def test_find_matching_rule():
-    client.post("/api/rules", headers=PIN, json=[{
-        "id": "test_rule_1", "name": "Özel Test Kuralı", "media_id": "all", "keywords": "katalog, test",
-        "public_reply": "Katalog DM'de!", "dm_message": "İşte kataloğunuz: https://likyastudios.com/katalog",
-        "is_active": True,
-    }])
-    matched = find_matching_rule("bana katalog atabilir misiniz?")
-    assert matched is not None
-    assert matched["name"] == "Özel Test Kuralı"
-    assert "https://likyastudios.com/katalog" in matched["dm_message"]
+# ---------------------------------------------------------------- Yorum → standart yanıt + sayfa linki DM
 
-    unmatched = find_matching_rule("alakasız bir yorum")
-    assert unmatched is None
+@pytest.fixture
+def outbox(monkeypatch):
+    sent = {"replies": [], "private": [], "dms": []}
 
+    async def reply(cid, text):
+        sent["replies"].append((cid, text)); return True
 
-def test_webhook_receive_instagram_dm(monkeypatch):
-    handled_dms = []
+    async def private(cid, text):
+        sent["private"].append((cid, text)); return True
 
-    async def mock_handle_dm(sender_id, text):
-        handled_dms.append((sender_id, text))
+    async def dm(rid, text):
+        sent["dms"].append((rid, text)); return True
 
-    monkeypatch.setattr(ig_module, "handle_dm", mock_handle_dm)
-
-    secret = "test_app_secret_12345"
-    ig_module.IG_APP_SECRET = secret
-
-    payload = {
-        "object": "instagram",
-        "entry": [
-            {
-                "id": "17841400000000000",
-                "time": 1700000000,
-                "messaging": [
-                    {
-                        "sender": {"id": "ig_sender_555"},
-                        "recipient": {"id": "page_id"},
-                        "message": {"mid": "mid.DM_TEST_1", "text": "Fiyat nedir?"},
-                    }
-                ],
-            }
-        ],
-    }
-    raw = json.dumps(payload).encode()
-    sig = f"sha256={hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()}"
-
-    res = client.post("/webhook", content=raw, headers={"X-Hub-Signature-256": sig})
-    assert res.status_code == 200
-    assert res.json() == {"status": "ok"}
-    assert len(handled_dms) == 1
-    assert handled_dms[0] == ("ig_sender_555", "Fiyat nedir?")
+    monkeypatch.setattr(ig, "reply_to_comment", reply)
+    monkeypatch.setattr(ig, "send_private_reply", private)
+    monkeypatch.setattr(ig, "send_instagram_dm", dm)
+    return sent
 
 
-def test_webhook_receive_instagram_comment(monkeypatch):
-    handled_comments = []
-
-    async def mock_handle_comment(comment_id, text, username, media_id=""):
-        handled_comments.append((comment_id, text, username, media_id))
-
-    monkeypatch.setattr(ig_module, "handle_comment", mock_handle_comment)
-
-    secret = "test_app_secret_12345"
-    ig_module.IG_APP_SECRET = secret
-
-    payload = {
-        "object": "instagram",
-        "entry": [
-            {
-                "id": "17841400000000000",
-                "time": 1700000000,
-                "changes": [
-                    {
-                        "field": "comments",
-                        "value": {
-                            "id": "comment_999",
-                            "text": "Çok güzel bir ürün!",
-                            "from": {"id": "user_11", "username": "ayse_yilmaz"},
-                            "media": {"id": "media_post_111"},
-                        },
-                    }
-                ],
-            }
-        ],
-    }
-    raw = json.dumps(payload).encode()
-    sig = f"sha256={hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()}"
-
-    res = client.post("/webhook", content=raw, headers={"X-Hub-Signature-256": sig})
-    assert res.status_code == 200
-    assert res.json() == {"status": "ok"}
-    assert len(handled_comments) == 1
-    assert handled_comments[0] == ("comment_999", "Çok güzel bir ürün!", "ayse_yilmaz", "media_post_111")
+def post_comment(**kw):
+    raw, headers = signed(comment_payload(**kw))
+    assert client.post("/webhook", content=raw, headers=headers).status_code == 200
 
 
-# ---------------------------------------------------------------- Yönetim API güvenliği
+def test_comment_on_video_with_page_gets_standard_reply_and_page_link(outbox):
+    post_comment()
+    settings = ig._load_seed()["settings"]
+    assert outbox["replies"] == [("c1", settings["public_reply"])]
+    cid, dm = outbox["private"][0]
+    assert cid == "c1" and f"{BASE}/orgu-yemek" in dm
+    log = ig.RECENT_LOGS[-1]
+    assert log["comment_ok"] and log["dm_ok"] and log["link"] == f"{BASE}/orgu-yemek"
+
+
+def test_reply_is_the_same_for_every_comment(outbox):
+    for i, text in enumerate(["harika", "link?", "fiyat ne", "👏"]):
+        post_comment(cid=f"c{i}", text=text)
+    assert len(outbox["replies"]) == 4 and len({t for _, t in outbox["replies"]}) == 1
+
+
+def test_comment_on_video_without_page_gets_general_link(outbox):
+    post_comment(media="999")
+    assert ig.RECENT_LOGS[-1]["link"] == BASE
+    assert BASE in outbox["private"][0][1] and "/orgu-yemek" not in outbox["private"][0][1]
+
+
+def test_inactive_page_falls_back_to_general_link(outbox):
+    client.put("/api/pages/18121864655327295", headers=PIN, json={"title": "Örgü", "slug": "orgu-yemek", "is_active": False})
+    post_comment()
+    assert ig.RECENT_LOGS[-1]["link"] == BASE
+
+
+def test_external_url_is_used_in_dm(outbox):
+    client.put("/api/pages/18121864655327295", headers=PIN,
+               json={"title": "Örgü", "external_url": "https://likyastudios.live/prompt/orgu-yemek"})
+    post_comment()
+    assert "https://likyastudios.live/prompt/orgu-yemek" in outbox["private"][0][1]
+
+
+def test_own_comments_are_ignored(outbox):
+    post_comment(user="likyastudios")
+    assert outbox["replies"] == [] and outbox["private"] == []
+
+
+def test_settings_change_applies_to_next_comment(outbox):
+    r = client.post("/api/settings", headers=PIN, json={"public_reply": "DM'ne baktık {user} 💌", "dm_template": "Al bakalım: {link}"})
+    assert r.status_code == 200
+    post_comment()
+    assert outbox["replies"][0][1] == "DM'ne baktık @ayse 💌"
+    assert outbox["private"][0][1] == f"Al bakalım: {BASE}/orgu-yemek"
+
+
+def test_dm_template_without_link_placeholder_still_contains_link(outbox):
+    client.post("/api/settings", headers=PIN, json={"public_reply": "ok", "dm_template": "Merhaba!"})
+    post_comment()
+    assert outbox["private"][0][1] == f"Merhaba!\n{BASE}/orgu-yemek"
+
+
+def test_direct_dm_without_ai_key_gets_general_link(outbox, monkeypatch):
+    monkeypatch.setattr(ig, "GEMINI_API_KEY", "")
+    payload = {"object": "instagram", "entry": [{"id": "1", "messaging": [
+        {"sender": {"id": "s1"}, "recipient": {"id": "p"}, "message": {"mid": "m-dm-1", "text": "link var mı"}}]}]}
+    raw, headers = signed(payload)
+    client.post("/webhook", content=raw, headers=headers)
+    assert outbox["dms"][0][0] == "s1" and BASE in outbox["dms"][0][1]
+
+
+# ---------------------------------------------------------------- Sayfa ve ayar API'leri
+
+def test_page_validation_and_slug_conflict():
+    assert client.put("/api/pages/123", headers=PIN, json={"title": ""}).status_code == 422
+    assert client.put("/api/pages/123", headers=PIN, json={"title": "X", "links": [{"label": "kötü", "url": "javascript:alert(1)"}]}).status_code == 422
+    assert client.put("/api/pages/123", headers=PIN, json={"title": "X", "slug": "api"}).status_code == 422
+    assert client.put("/api/pages/123", headers=PIN, json={"title": "X", "external_url": "ftp://x"}).status_code == 422
+    assert client.put("/api/pages/123", headers=PIN, json={"title": "Başka", "slug": "orgu-yemek"}).status_code == 409
+    ok = client.put("/api/pages/123", headers=PIN, json={"title": "Çılgın Şeyler Öğren", "prompts": [{"label": "P", "text": "metin"}],
+                                                         "steps": ["bir", " ", "iki"], "tip": "ipucu"})
+    assert ok.status_code == 200
+    page = ok.json()["page"]
+    assert page["slug"] == "cilgin-seyler-ogren" and page["steps"] == ["bir", "iki"] and page["prompts"][0]["text"] == "metin"
+    assert client.delete("/api/pages/123", headers=PIN).status_code == 200
+    assert client.delete("/api/pages/123", headers=PIN).status_code == 404
+
+
+def test_settings_validation():
+    assert client.post("/api/settings", headers=PIN, json={"public_reply": "", "dm_template": "x"}).status_code == 422
+    assert client.post("/api/settings", headers=PIN, json={"public_reply": "x" * 301, "dm_template": "x"}).status_code == 422
+    assert client.post("/api/settings", headers=PIN, json={"public_reply": "ok", "dm_template": ""}).status_code == 422
+
+
+def test_posts_include_pages_even_without_instagram_token():
+    data = client.get("/api/posts", headers=PIN).json()
+    assert "18121864655327295" in {p["id"] for p in data["posts"]}
+    assert data["general_url"] == BASE
+
+
+def test_new_instagram_post_appears_automatically(monkeypatch):
+    ig.MEDIA_CACHE.update(at=10**12, items=[{"id": "777", "title": "Yeni video", "caption": "", "media_type": "VIDEO",
+                                             "permalink": "https://instagram.com/p/x", "timestamp": "2026-11-15T10:00:00+0000", "thumb": None}])
+    monkeypatch.setattr(ig.time, "monotonic", lambda: 10**12 + 1)
+    post = next(p for p in client.get("/api/posts", headers=PIN).json()["posts"] if p["id"] == "777")
+    assert post["page"] is None and post["title"] == "Yeni video"
+
 
 @pytest.mark.parametrize("method,path", [
-    ("get", "/api/rules"), ("get", "/api/logs"), ("get", "/api/media"), ("get", "/api/status"),
-    ("get", "/api/prompt"), ("post", "/api/rules"), ("post", "/api/prompt"), ("post", "/api/test-match"),
+    ("get", "/api/status"), ("get", "/api/posts"), ("get", "/api/logs"), ("get", "/api/settings"),
+    ("post", "/api/settings"), ("put", "/api/pages/1"), ("delete", "/api/pages/1"),
 ])
-def test_admin_api_requires_pin(method, path):
-    kwargs = {"json": {}} if method == "post" else {}
+def test_admin_api_requires_login(method, path):
+    kwargs = {"json": {}} if method in ("post", "put") else {}
     assert getattr(client, method)(path, **kwargs).status_code == 401
-    bad = getattr(client, method)(path, headers={"X-Admin-Pin": "yanlis"}, **kwargs)
-    assert bad.status_code == 401
-
-
-def test_rules_cannot_be_overwritten_without_pin():
-    before = client.get("/api/rules", headers=PIN).json()
-    res = client.post("/api/rules", json=[])
-    assert res.status_code == 401
-    assert client.get("/api/rules", headers=PIN).json() == before
+    assert getattr(client, method)(path, headers={"X-Admin-Pin": "yanlis"}, **kwargs).status_code == 401
 
 
 def test_pin_bruteforce_is_rate_limited():
-    for _ in range(ig_module.PIN_FAIL_LIMIT):
-        assert client.get("/api/status", headers={"X-Admin-Pin": "x"}).status_code == 401
-    assert client.get("/api/status", headers={"X-Admin-Pin": "x"}).status_code == 429
+    for _ in range(ig.PIN_FAIL_LIMIT):
+        client.get("/api/status", headers={"X-Admin-Pin": "x"})
     assert client.get("/api/status", headers=PIN).status_code == 429
 
 
-def test_dashboard_does_not_embed_private_data():
-    ig_module.RECENT_LOGS.append({"type": "DM", "user": "gizli_kullanici", "input": "<img src=x onerror=alert(1)>",
-                                  "reply": "x", "matched_rule": "x"})
-    try:
-        html = client.get("/").text
-        assert "gizli_kullanici" not in html
-        assert "onerror=alert(1)" not in html
-        assert "likya2026" not in html
-        assert "cdn.tailwindcss.com" not in html
-    finally:
-        ig_module.RECENT_LOGS.pop()
-
-
-def test_status_reports_config_without_secrets():
-    data = client.get("/api/status", headers=PIN).json()
-    assert set(data) >= {"instagram", "webhook", "ai", "security", "rules", "logs"}
-    flat = json.dumps(data)
-    for secret in (ig_module.IG_PAGE_ACCESS_TOKEN, ig_module.GEMINI_API_KEY, ig_module.IG_APP_SECRET, ig_module.ADMIN_PIN):
+def test_status_has_no_secrets():
+    flat = json.dumps(client.get("/api/status", headers=PIN).json())
+    for secret in (ig.IG_PAGE_ACCESS_TOKEN, ig.GEMINI_API_KEY, SECRET, ig.ADMIN_PIN, ig.SESSION_SECRET):
         if secret:
             assert secret not in flat
 
 
-def test_test_match_has_no_side_effects(monkeypatch):
-    calls = []
-    monkeypatch.setattr(ig_module, "reply_to_comment", lambda *a: calls.append(a))
-    res = client.post("/api/test-match", headers=PIN, json={"text": "pdf linki lütfen", "media_id": ""})
-    assert res.status_code == 200
-    assert res.json()["matched"] is True
-    assert calls == []
-    miss = client.post("/api/test-match", headers=PIN, json={"text": "merhaba", "media_id": ""}).json()
-    assert miss["matched"] is False
+# ---------------------------------------------------------------- Google girişi
+
+@pytest.fixture
+def google_mode(monkeypatch):
+    monkeypatch.setattr(ig, "GOOGLE_CLIENT_ID", "cid.apps.googleusercontent.com")
+    monkeypatch.setattr(ig, "ADMIN_EMAILS", {"sahip@example.com"})
+    monkeypatch.setattr(ig, "SESSION_SECRET", "s" * 40)
+    yield
 
 
-def test_rules_payload_is_validated():
-    assert client.post("/api/rules", headers=PIN, json={"rules": "bozuk"}).status_code == 422
-    res = client.post("/api/rules", headers=PIN, json=[{"name": "  Yalın  "}])
-    assert res.status_code == 200
-    saved = client.get("/api/rules", headers=PIN).json()[0]
-    assert saved["name"] == "Yalın" and saved["media_id"] == "all" and saved["keywords"] == "*" and saved["is_active"] is True
+def test_google_mode_disables_pin(google_mode):
+    assert client.get("/api/session").json()["mode"] == "google"
+    assert client.get("/api/status", headers=PIN).status_code == 401
 
 
-def test_prompt_roundtrip_and_empty_rejected():
-    assert client.post("/api/prompt", headers=PIN, json={"prompt": "   "}).status_code == 422
-    assert client.post("/api/prompt", headers=PIN, json={"prompt": "Yeni talimat"}).status_code == 200
-    assert client.get("/api/prompt", headers=PIN).json()["prompt"] == "Yeni talimat"
+def test_google_session_cookie_grants_access(google_mode):
+    c = TestClient(app, cookies={auth.SESSION_COOKIE: auth.sign_session("sahip@example.com", "s" * 40)})
+    assert c.get("/api/status").status_code == 200
+    assert c.get("/api/session").json()["email"] == "sahip@example.com"
+    # Başka siteden gelen değiştirme isteği reddedilir
+    assert c.post("/api/settings", headers={"Origin": "https://kotu.example"}, json={}).status_code == 403
 
 
-def test_webhook_rejected_signature_is_counted():
-    ig_module.IG_APP_SECRET = "test_app_secret_12345"
-    before = ig_module.STATS["webhook_rejected"]
-    res = client.post("/webhook", content=b"{}", headers={"X-Hub-Signature-256": "sha256=bad"})
-    assert res.status_code == 401
-    assert ig_module.STATS["webhook_rejected"] == before + 1
+def test_session_rejects_tampering_expiry_and_other_emails():
+    secret, allowed = "k" * 40, {"sahip@example.com"}
+    tok = auth.sign_session("sahip@example.com", secret)
+    assert auth.read_session(tok, secret, allowed) == "sahip@example.com"
+    assert auth.read_session(tok + "x", secret, allowed) is None
+    assert auth.read_session(tok, "baska" * 8, allowed) is None
+    assert auth.read_session(tok, secret, {"diger@example.com"}) is None
+    assert auth.read_session(auth.sign_session("sahip@example.com", secret, now=0), secret, allowed) is None
+
+
+def test_google_login_rejects_unknown_accounts(google_mode, monkeypatch):
+    async def fake_verify(credential, client_id, allowed):
+        raise ValueError("Bu Google hesabının panele erişim izni yok.")
+    monkeypatch.setattr(auth, "verify_google_credential", fake_verify)
+    r = client.post("/auth/google", json={"credential": "x"})
+    assert r.status_code == 403 and auth.SESSION_COOKIE not in r.cookies
+
+
+def test_google_login_sets_httponly_cookie(google_mode, monkeypatch):
+    async def fake_verify(credential, client_id, allowed):
+        return "sahip@example.com"
+    monkeypatch.setattr(auth, "verify_google_credential", fake_verify)
+    r = client.post("/auth/google", json={"credential": "x"})
+    assert r.status_code == 200 and "httponly" in r.headers["set-cookie"].lower()
+
+
+# ---------------------------------------------------------------- Herkese açık sayfalar
+
+def test_public_pages_on_path_and_host():
+    page = client.get("/p/orgu-yemek")
+    assert page.status_code == 200 and "Kopyala" in page.text and "Örgüden (tığ işi yün)" in page.text
+    assert client.get("/orgu-yemek", headers={"host": "link.likyastudios.live"}).status_code == 200
+    index = client.get("/", headers={"host": "link.likyastudios.live"})
+    assert "Stirling PDF" in index.text and "Instagram Paneli" not in index.text
+    assert client.get("/p/yok-boyle-sayfa").status_code == 404
+    assert client.get("/orgu-yemek").status_code == 404   # panel adresinde sayfa yolu açık değil
+
+
+def test_public_page_escapes_content():
+    client.put("/api/pages/555", headers=PIN, json={
+        "title": "<script>alert(1)</script>", "slug": "xss", "body": "<img src=x onerror=alert(2)>",
+        "prompts": [{"label": "</div><b>", "text": "<svg onload=alert(3)>"}],
+        "links": [{"label": "<i>a</i>", "url": "https://ok.example/?q=<x>"}]})
+    html = client.get("/p/xss").text
+    for bad in ("<script>alert(1)", "<img src=x", "<svg onload", "</div><b>", "<i>a</i>"):
+        assert bad not in html
+
+
+def test_safe_url():
+    assert public_pages.safe_url("https://a.com") and not public_pages.safe_url("javascript:alert(1)")
+    assert not public_pages.safe_url("data:text/html,x") and not public_pages.safe_url("/relative")
+
+
+# ---------------------------------------------------------------- Depo
+
+def test_store_refuses_to_overwrite_when_unreadable(tmp_path):
+    bad = tmp_path / "data.json"
+    bad.write_text("{bozuk json", encoding="utf-8")
+    store = DataStore("", "x", bad, {"settings": {}, "pages": {}})
+
+    async def run():
+        await store.load()
+        with pytest.raises(RuntimeError):
+            await store.save({"settings": {}, "pages": {}})
+    asyncio.run(run())
+    assert bad.read_text(encoding="utf-8") == "{bozuk json"
+
+
+def test_store_persists_between_instances(tmp_path):
+    path = tmp_path / "d.json"
+
+    async def run():
+        a = DataStore("", "x", path, {"settings": {"public_reply": "v1"}, "pages": {}})
+        data = await a.load(); data["settings"]["public_reply"] = "v2"; await a.save(data)
+        b = DataStore("", "x", path, {"settings": {"public_reply": "v1", "yeni": "ek"}, "pages": {}})
+        loaded = await b.load()
+        assert loaded["settings"]["public_reply"] == "v2" and loaded["settings"]["yeni"] == "ek"
+    asyncio.run(run())
+
+
+def test_seed_file_is_valid():
+    seed = json.loads(Path(ig.SEED_FILE).read_text(encoding="utf-8"))
+    slugs = [p["slug"] for p in seed["pages"].values()]
+    assert len(slugs) == len(set(slugs))
+    for p in seed["pages"].values():
+        for link in p["links"]:
+            assert public_pages.safe_url(link["url"])
+
+
+def test_webhook_with_invalid_encoding_returns_400():
+    raw = '{"object":"instagram","entry":[{"text":"ğ"}]}'.encode("cp1254")
+    sig = "sha256=" + hmac.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    assert client.post("/webhook", content=raw, headers={"X-Hub-Signature-256": sig}).status_code == 400

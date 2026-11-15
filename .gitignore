@@ -5,3 +5,4 @@ __pycache__/
 .env
 .env.yaml
 .DS_Store
+data.local.json

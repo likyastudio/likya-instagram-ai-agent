@@ -30,7 +30,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 2 \
-    --env-vars-file .env.yaml
+    --update-env-vars "PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://link.likyastudios.live}"
 
 echo "=================================================="
 echo "✅ Dağıtım tamamlandı!"

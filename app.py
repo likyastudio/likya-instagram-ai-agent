@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 import httpx
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 
 import auth
@@ -78,7 +79,7 @@ DASHBOARD_FILE = BASE_DIR / "static" / "dashboard.html"
 SEED_FILE = BASE_DIR / "seed-data.json"
 LOCAL_DATA_FILE = BASE_DIR / "data.local.json"
 
-RESERVED_SLUGS = {"p", "api", "auth", "webhook", "health", "static", "docs", "openapi.json", "favicon.ico", "robots.txt"}
+RESERVED_SLUGS = {"p", "api", "auth", "brand", "webhook", "health", "static", "docs", "openapi.json", "favicon.ico", "robots.txt"}
 GENERAL_KEY = "__general__"
 
 # Bellek içi kuyruklar
@@ -110,7 +111,14 @@ def _load_seed() -> dict:
 
 STORE = DataStore(DATA_BUCKET, "instagram-agent/data.json", LOCAL_DATA_FILE, _load_seed())
 
-app = FastAPI(title="Likya Studios Instagram Automation", version="4.0.0")
+app = FastAPI(title="Likya Studios Instagram Automation", version="4.1.0")
+BRAND_DIR = BASE_DIR / "static" / "brand"
+app.mount("/brand", StaticFiles(directory=BRAND_DIR), name="brand")   # Likya Studios logosu ve türevleri
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse(BRAND_DIR / "favicon.ico", headers={"Cache-Control": "public, max-age=86400"})
 
 
 def _now_iso() -> str:

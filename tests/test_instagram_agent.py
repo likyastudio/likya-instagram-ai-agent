@@ -351,3 +351,13 @@ def test_per_post_dm_message_overrides_shared_template(outbox):
     assert outbox["private"][1][1] != outbox["private"][0][1] and f"{BASE}/stirling-pdf" in outbox["private"][1][1]
     # yorum yanıtı iki gönderide de aynı standart metin
     assert outbox["replies"][0][1] == outbox["replies"][1][1]
+
+
+def test_logo_assets_are_served_and_used():
+    for path in ("/brand/logo-96.png", "/brand/logo-192.png", "/brand/og.png", "/favicon.ico"):
+        assert client.get(path).status_code == 200, path
+    assert client.get("/brand/logo-96.png", headers={"host": "link.likyastudios.live"}).status_code == 200
+    assert "/brand/logo-96.png" in client.get("/").text
+    page = client.get("/p/stirling-pdf").text
+    assert "/brand/logo-96.png" in page and "/favicon.ico" in page
+    assert client.put("/api/pages/9", headers=PIN, json={"title": "X", "slug": "brand"}).status_code == 422

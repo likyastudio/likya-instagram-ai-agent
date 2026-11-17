@@ -3,6 +3,7 @@
 Kullanım (proje klasöründe):
   python scripts/video_page.py add yol/025-markitdown.json        # taslak olarak ekle
   python scripts/video_page.py add yol/025-markitdown.json --media-id 18123456789   # doğrudan gönderiye bağla
+  python scripts/video_page.py add yol/024-ogrenci.json --site       # DM'de ana sitedeki likyastudios.live/prompt/<slug> gitsin
   python scripts/video_page.py list                                # sayfaları ve bekleyen taslakları göster
 
 Taslak eklenince sayfa hemen https://link.likyastudios.live/<slug> adresinde açılır. Video Instagram'da
@@ -26,6 +27,7 @@ import video_import  # noqa: E402
 PROJECT = "app-map-509800"
 OBJECT = "gs://likya-instagram-data-530805644511/instagram-agent/data.json"
 PUBLIC = "https://link.likyastudios.live"
+SITE_PROMPT = "https://likyastudios.live/prompt"
 RESERVED = {"p", "api", "auth", "brand", "webhook", "health", "static", "docs", "openapi.json", "favicon.ico", "robots.txt"}
 
 
@@ -52,9 +54,11 @@ def write_store(data: dict, generation: str) -> None:
            "--content-type=application/json; charset=utf-8", stdin=body)
 
 
-def cmd_add(path: str, media_id: str | None) -> None:
+def cmd_add(path: str, media_id: str | None, site: bool = False) -> None:
     page = video_import.page_from_video_json(json.loads(Path(path).read_text(encoding="utf-8")))
     slug = page["slug"]
+    if site:
+        page["external_url"] = f"{SITE_PROMPT}/{slug}"   # DM bu adresi gönderir
     if slug in RESERVED:
         raise SystemExit(f"'{slug}' sayfa adresi olarak kullanılamaz.")
     data, gen = read_store()
@@ -72,6 +76,7 @@ def cmd_add(path: str, media_id: str | None) -> None:
     write_store(data, gen)
     kws = ", ".join(video_import.keywords(page)) or "-"
     print(f"Eklendi: {page['title']}\n  Yer: {where}\n  Sayfa: {PUBLIC}/{slug}\n"
+          f"  DM linki: {page['external_url'] or PUBLIC + '/' + slug}\n"
           f"  Eşleştirme kelimeleri: {kws}\n  Prompt: {len(page['prompts'])}, link: {len(page['links'])}, adım: {len(page['steps'])}")
 
 
@@ -91,11 +96,12 @@ def main() -> None:
     a = sub.add_parser("add", help="video içerik dosyasını ekle")
     a.add_argument("file")
     a.add_argument("--media-id", help="Instagram gönderi kimliği (biliniyorsa doğrudan bağlar)")
+    a.add_argument("--site", action="store_true", help="DM'de ana sitedeki likyastudios.live/prompt/<slug> sayfası gitsin")
     sub.add_parser("list", help="sayfaları ve taslakları listele")
     args = ap.parse_args()
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")
-    cmd_add(args.file, args.media_id) if args.cmd == "add" else cmd_list()
+    cmd_add(args.file, args.media_id, args.site) if args.cmd == "add" else cmd_list()
 
 
 if __name__ == "__main__":

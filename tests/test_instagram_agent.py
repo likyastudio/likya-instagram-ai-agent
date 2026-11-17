@@ -476,3 +476,23 @@ def test_video_page_command_adds_draft(monkeypatch, tmp_path, capsys):
     store["pages"]["2"] = {"slug": "markitdown"}
     with pytest.raises(SystemExit):
         cmd.cmd_add(str(FIX / "025-markitdown.json"), None)
+
+
+def test_video_page_command_site_option(monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("video_page2", Path(__file__).parent.parent / "scripts" / "video_page.py")
+    cmd = importlib.util.module_from_spec(spec); spec.loader.exec_module(cmd)
+    writes = []
+    monkeypatch.setattr(cmd, "read_store", lambda: ({"settings": {}, "pages": {}, "drafts": {}}, "1"))
+    monkeypatch.setattr(cmd, "write_store", lambda data, gen: writes.append(data))
+    cmd.cmd_add(str(FIX / "024-ogrenci.json"), None, site=True)
+    assert writes[-1]["drafts"]["ogrenci"]["external_url"] == "https://likyastudios.live/prompt/ogrenci"
+
+
+def test_bound_draft_with_site_link_sends_site_url(outbox, monkeypatch):
+    og = video_import.page_from_video_json(json.loads((FIX / "024-ogrenci.json").read_text(encoding="utf-8")))
+    og["external_url"] = "https://likyastudios.live/prompt/ogrenci"
+    add_draft(og)
+    set_media(monkeypatch, [media("906", "Öğrenciysen bu 8 aracı ücretsiz kullan 🎓", ts="2026-11-15T17:00:00+0000")])
+    post_comment(media="906")
+    assert "https://likyastudios.live/prompt/ogrenci" in outbox["private"][0][1]

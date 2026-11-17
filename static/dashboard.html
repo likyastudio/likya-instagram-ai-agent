@@ -152,6 +152,13 @@
   .set-card > p { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
   .bubble { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .bubble b { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .hint + .field { margin-top: 14px; }
+  .igcard { margin-top: 12px; max-width: 300px; border-radius: 18px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); }
+  .igcard img { display: block; width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; background: #0a0a0a; }
+  .igcard-body { padding: 10px 14px 4px; display: grid; gap: 2px; }
+  .igcard-body b { font-size: 15px; overflow-wrap: anywhere; }
+  .igcard-body span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .igcard-btn { margin: 8px 10px 10px; padding: 9px; border-radius: 10px; background: var(--surface); text-align: center; font-weight: 600; font-size: 14px; color: var(--info); }
   .savebar { position: sticky; bottom: 0; z-index: 5; margin-top: 16px; padding: 12px 0; display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; background: var(--bg); border-top: 1px solid var(--line); }
 
   /* Link listesi düzenleyici */
@@ -305,11 +312,31 @@
           </div>
           <div class="card set-card">
             <h3>DM mesajı</h3>
-            <p>Yorum yapan kişiye özelden gider. <code>{link}</code> yazan yere o videonun sayfa linki eklenir.</p>
-            <label class="field" for="sDm">Mesaj</label>
-            <textarea class="input" id="sDm" rows="5" maxlength="900" required></textarea>
+            <p>Yorum yapan kişiye özelden gider ve o videonun sayfasını açar.</p>
+            <label class="field" for="sFormat">Mesaj biçimi</label>
+            <select class="input" id="sFormat">
+              <option value="card">Kart: görsel + düğme (önerilen)</option>
+              <option value="text">Düz metin + link</option>
+            </select>
+            <div id="cardFields">
+              <div style="height:12px"></div>
+              <label class="field" for="sSub">Kart açıklaması</label>
+              <input class="input" id="sSub" maxlength="80" placeholder="İstediğin bağlantılar burada 👇">
+              <p class="hint">En fazla 80 karakter. Başlık olarak videonun sayfa adı kullanılır; gönderiye özel DM metni varsa açıklama o olur.</p>
+              <label class="field" for="sBtn">Düğme yazısı</label>
+              <input class="input" id="sBtn" maxlength="20" placeholder="Bağlantıyı aç">
+              <div class="igcard" aria-label="Kart önizlemesi">
+                <img id="cardImg" alt="" referrerpolicy="no-referrer">
+                <div class="igcard-body"><b id="cardTitle"></b><span id="cardSub"></span></div>
+                <div class="igcard-btn" id="cardBtn"></div>
+              </div>
+              <p class="hint">Instagram'daki görünüm yaklaşık olarak böyledir. Kart herhangi bir sebeple gönderilemezse aşağıdaki düz metin gider.</p>
+            </div>
+            <div style="height:12px"></div>
+            <label class="field" for="sDm" id="sDmLabel">Düz metin mesajı</label>
+            <textarea class="input" id="sDm" rows="4" maxlength="900" required></textarea>
             <p class="hint" id="sDmHint"></p>
-            <div class="bubble"><b>Önizleme</b><span id="sDmPrev"></span></div>
+            <div class="bubble" id="sDmPrevBox"><b>Önizleme</b><span id="sDmPrev"></span></div>
           </div>
           <div class="card set-card">
             <h3>Genel kaynak sayfası</h3>
@@ -872,7 +899,8 @@
   }));
 
   // ---------- Mesaj ayarları
-  const SFIELDS = { sReply: "public_reply", sDm: "dm_template", sGTitle: "general_title", sGIntro: "general_intro", sAi: "ai_prompt" };
+  const SFIELDS = { sReply: "public_reply", sFormat: "dm_format", sSub: "card_subtitle", sBtn: "card_button", sDm: "dm_template",
+                    sGTitle: "general_title", sGIntro: "general_intro", sAi: "ai_prompt" };
   function fillSettings() {
     for (const [id, key] of Object.entries(SFIELDS)) $("#" + id).value = state.settings[key] || "";
     $("#sGLink").href = (state.status && state.status.public_base) || state.generalUrl || "/p";
@@ -886,13 +914,20 @@
     const sample = state.posts.find(p => p.page && p.page.is_active !== false);
     const link = sample ? sample.page_url : ((state.status && state.status.public_base) || state.generalUrl);
     $("#sDmPrev").textContent = renderDm(dm, link, sample ? sample.page.title : "");
+    const isCard = $("#sFormat").value === "card";
+    $("#cardFields").hidden = !isCard;
+    $("#sDmLabel").textContent = isCard ? "Yedek düz metin mesajı (kart gönderilemezse)" : "Düz metin mesajı";
+    $("#cardImg").src = (state.settings && state.settings.card_image) || "/brand/og.png";
+    $("#cardTitle").textContent = sample ? sample.page.title : "Video sayfasının adı";
+    $("#cardSub").textContent = $("#sSub").value.trim() || "İstediğin bağlantılar burada 👇";
+    $("#cardBtn").textContent = $("#sBtn").value.trim() || "Bağlantıyı aç";
     $("#sDmHint").textContent = dm.includes("{link}") ? "Link, {link} yazan yere eklenecek." : "Metinde {link} yok; link mesajın sonuna eklenecek.";
     const dirty = settingsDirty();
     $("#settingsDirty").textContent = dirty ? "Kaydedilmemiş değişiklik var" : "";
     $("#settingsSave").disabled = !dirty || !reply.trim() || !dm.trim();
     $("#settingsReset").disabled = !dirty;
   }
-  Object.keys(SFIELDS).forEach(id => $("#" + id).addEventListener("input", updateSettingsUi));
+  Object.keys(SFIELDS).forEach(id => { $("#" + id).addEventListener("input", updateSettingsUi); $("#" + id).addEventListener("change", updateSettingsUi); });
   $("#settingsReset").addEventListener("click", fillSettings);
   $("#settingsForm").addEventListener("submit", async e => {
     e.preventDefault();

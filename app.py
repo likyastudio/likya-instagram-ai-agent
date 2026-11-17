@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 
 import auth
 import public_pages
+import video_import
 from store import DataStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -319,12 +320,53 @@ async def send_private_reply(comment_id: str, text: str) -> bool:
                              "Yorum sonrası özel DM")
 
 
+# ---------------------------------------------------------------- Taslakların gönderilere otomatik bağlanması
+
+async def auto_bind_drafts(media: list[dict]) -> list[tuple[str, str]]:
+    """Yeni gönderileri, açıklamasında adı geçen hazır taslakla eşleştirip sayfayı o gönderiye bağlar."""
+    data = await STORE.load()
+    if not data.get("drafts") or not media:
+        return []
+    bindings = video_import.find_bindings(data["drafts"], media, set(data["pages"]))
+    if not bindings:
+        return []
+    data = await STORE.load(force=True)            # kaydetmeden önce en güncel hali al
+    done = []
+    for mid, slug in bindings.items():
+        draft = data["drafts"].pop(slug, None)
+        if not draft or mid in data["pages"]:
+            continue
+        draft.update(auto_bound=True, bound_at=_now_iso())
+        data["pages"][mid] = draft
+        done.append((mid, slug))
+    if done:
+        try:
+            await STORE.save(data)
+            for mid, slug in done:
+                logger.info(f"Taslak '{slug}' gönderiye ({mid}) otomatik bağlandı.")
+                RECENT_LOGS.append({"time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
+                                    "type": "SİSTEM", "kind": "system", "user": "Otomatik eşleştirme",
+                                    "input": f"Yeni gönderi {mid}", "reply": f"“{slug}” sayfası bu gönderiye bağlandı.",
+                                    "rule": slug, "matched_rule": slug})
+        except Exception as e:
+            logger.error(f"Otomatik bağlama kaydedilemedi: {e}")
+            return []
+    return done
+
+
 # ---------------------------------------------------------------- İşleyiciler
 
 async def handle_comment(comment_id: str, text: str, username: str = "", media_id: str = "") -> None:
     data = await STORE.load()
     settings, pages = data["settings"], data["pages"]
     page = pages.get(str(media_id))
+    if page is None and media_id and data.get("drafts"):
+        # Yeni videoya ilk yorum: gönderi listesini tazeleyip hazır taslakla eşleştirmeyi dene
+        known = any(m["id"] == str(media_id) for m in MEDIA_CACHE["items"])
+        if await auto_bind_drafts(await fetch_instagram_media(fresh=not known)):
+            data = await STORE.load()
+            settings, pages = data["settings"], data["pages"]
+            page = pages.get(str(media_id))
     if page and not page.get("is_active", True):
         page = None
     link = page_url(page)
@@ -452,7 +494,8 @@ async def get_status_api(request: Request):
         "ai": {"key_set": bool(GEMINI_API_KEY), "model": GEMINI_MODEL},
         "storage": {"backend": STORE.backend, "error": STORE.last_error},
         "security": {"admin_pin_is_default": auth_mode() == "pin" and ADMIN_PIN == DEFAULT_ADMIN_PIN},
-        "pages": {"total": len(pages), "active": sum(1 for p in pages.values() if p.get("is_active", True))},
+        "pages": {"total": len(pages), "active": sum(1 for p in pages.values() if p.get("is_active", True)),
+                  "drafts": len(data.get("drafts", {}))},
         "logs": {"count": len(RECENT_LOGS), "capacity": RECENT_LOGS.maxlen},
     }
 
@@ -462,6 +505,7 @@ async def get_posts_api(request: Request, fresh: int = 0):
     """Instagram gönderileri + her birinin sayfa durumu. Yeni gönderi otomatik listelenir."""
     require_admin(request)
     media = await fetch_instagram_media(fresh=bool(fresh))
+    await auto_bind_drafts(media)
     data = await STORE.load()
     pages = data["pages"]
     posts = []
@@ -475,7 +519,37 @@ async def get_posts_api(request: Request, fresh: int = 0):
         if mid not in seen:
             posts.append({"id": mid, "title": page.get("title", ""), "caption": "", "media_type": "", "permalink": "",
                           "timestamp": "", "thumb": None, "page": page, "page_url": page_url(page), "older": True})
-    return {"posts": posts, "general_url": public_base(), "media_error": STATS["media_error"]}
+    drafts = [{**d, "page_url": page_url(d)} for d in data.get("drafts", {}).values()]
+    return {"posts": posts, "drafts": drafts, "general_url": public_base(), "media_error": STATS["media_error"]}
+
+
+@app.post("/api/drafts/{slug}/bind/{media_id}")
+async def bind_draft_api(slug: str, media_id: str, request: Request):
+    """Hazır taslağı panelden elle bir gönderiye bağlar."""
+    require_admin(request)
+    data = await STORE.load(force=True)
+    if slug not in data.get("drafts", {}):
+        raise HTTPException(status_code=404, detail="Taslak bulunamadı.")
+    if media_id in data["pages"]:
+        raise HTTPException(status_code=409, detail="Bu gönderinin zaten bir sayfası var.")
+    draft = data["drafts"].pop(slug)
+    draft.update(bound_at=_now_iso())
+    data["pages"][media_id] = draft
+    try:
+        await STORE.save(data)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Kaydedilemedi: {e}")
+    return {"status": "ok", "page_url": page_url(draft)}
+
+
+@app.delete("/api/drafts/{slug}")
+async def delete_draft_api(slug: str, request: Request):
+    require_admin(request)
+    data = await STORE.load(force=True)
+    if data.get("drafts", {}).pop(slug, None) is None:
+        raise HTTPException(status_code=404, detail="Taslak bulunamadı.")
+    await STORE.save(data)
+    return {"status": "ok"}
 
 
 def _clean_page(raw: dict) -> dict:
@@ -522,6 +596,8 @@ async def save_page_api(media_id: str, request: Request):
         raise HTTPException(status_code=422, detail="Geçersiz gönderi kimliği.")
     page = _clean_page(await request.json())
     data = await STORE.load(force=True)
+    if page["slug"] in data.get("drafts", {}):
+        raise HTTPException(status_code=409, detail=f"“{page['slug']}” adresi bekleyen bir taslakta kullanılıyor.")
     for mid, other in data["pages"].items():
         if mid != media_id and other.get("slug") == page["slug"]:
             raise HTTPException(status_code=409, detail=f"“{page['slug']}” adresi başka bir videoda kullanılıyor.")
@@ -683,6 +759,10 @@ async def _public_page(slug: str) -> HTMLResponse:
             thumb = (await _thumbs()).get(mid)
             return HTMLResponse(public_pages.render_video_page(page, thumb, public_base(), public_base()),
                                 headers={"Cache-Control": "public, max-age=60"})
+    draft = data.get("drafts", {}).get(slug)   # video henüz paylaşılmadıysa da sayfa açılır
+    if draft and draft.get("is_active", True):
+        return HTMLResponse(public_pages.render_video_page(draft, None, public_base(), public_base()),
+                            headers={"Cache-Control": "public, max-age=60"})
     return HTMLResponse(public_pages.render_not_found(public_base()), status_code=404)
 
 

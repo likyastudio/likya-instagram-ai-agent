@@ -27,6 +27,22 @@
 - **Hareketler:** Son 50 yorum/DM ve gönderim durumu (bellekte; sunucu yeniden başlayınca sıfırlanır).
 - **Mesaj ayarları:** Standart yorum yanıtı, DM metni (`{link}`, `{user}`), genel sayfa, yapay zekâ talimatı.
 
+## Yeni video yayınlama (otomatik)
+
+1. Video için içerik dosyası hazırlanır (ana sitedeki şema: `NNN-slug.json`).
+2. Dosya sisteme eklenir — sayfa hemen `link.likyastudios.live/<slug>` adresinde açılır:
+
+   ```bash
+   python scripts/video_page.py add yol/025-markitdown.json
+   ```
+
+3. Video Instagram'da paylaşılır. Açıklamasında taslağın adı geçiyorsa (ör. "MarkItDown") sistem sayfayı
+   o gönderiye **kendiliğinden bağlar** (panel açıldığında veya videoya ilk yorum geldiğinde) ve yorum
+   yapanlara bu sayfanın linki gider. Kesin olmayan eşleşmede bağlanmaz; panelde gönderiyi açıp
+   "Hazır taslağı bağla" denir. Gönderi kimliği biliniyorsa: `add dosya.json --media-id <id>`.
+
+`python scripts/video_page.py list` sayfaları ve bekleyen taslakları gösterir.
+
 ## Veri
 
 Ayarlar ve sayfalar `DATA_BUCKET` kovasında `instagram-agent/data.json` olarak kalıcı tutulur (`store.py`).

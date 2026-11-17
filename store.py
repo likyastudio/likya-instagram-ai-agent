@@ -84,6 +84,9 @@ class DataStore:
             out["settings"].update({k: v for k, v in (data.get("settings") or {}).items()})
             if isinstance(data.get("pages"), dict):
                 out["pages"] = data["pages"]
+            if isinstance(data.get("drafts"), dict):
+                out["drafts"] = data["drafts"]
+        out.setdefault("drafts", {})
         return out
 
     async def load(self, force: bool = False) -> dict:

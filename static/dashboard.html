@@ -128,6 +128,7 @@
   .item-time { color: var(--muted); font-size: 13px; margin-left: auto; }
   .tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: var(--surface-2); color: var(--muted); }
   .tag.comment { background: var(--info-bg); color: var(--info); }
+  .tag.system { background: var(--ok-bg); color: var(--ok); }
   .tag.dm { background: color-mix(in srgb, var(--accent-fill) 16%, transparent); color: var(--accent); }
   .quote { margin: 0; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; overflow-wrap: anywhere; white-space: pre-wrap; }
   .reply-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 2px; }
@@ -266,6 +267,11 @@
           <button type="button" data-pfilter="missing" aria-pressed="false">Sayfası olmayan</button>
         </div>
       </div>
+      <div id="draftsBox" class="card" style="padding:14px 16px;margin-bottom:16px" hidden>
+        <h3 style="font-size:16px;margin-bottom:4px">Video bekleyen sayfalar</h3>
+        <p class="muted" style="margin:0 0 10px;font-size:14px">Bu sayfalar hazır ve açılıyor. Video paylaşılınca açıklamasında adı geçiyorsa kendiliğinden o gönderiye bağlanır; bağlanmazsa gönderiyi açıp “Hazır taslağı bağla” deyin.</p>
+        <ul id="draftsList" style="margin:0;padding:0;list-style:none;display:grid;gap:8px"></ul>
+      </div>
       <div class="posts" id="postsGrid"><div class="skeleton tall"></div><div class="skeleton tall"></div><div class="skeleton tall"></div></div>
     </section>
 
@@ -341,6 +347,12 @@
     </div>
     <div class="dlg-body">
       <div class="ed-head" id="edHead"></div>
+      <div class="alert info form-row" id="pBindBox" hidden>
+        <svg class="ico"><use href="#i-info"/></svg>
+        <div style="min-width:0"><b>Bu video için hazır sayfa olabilir.</b>
+          <p style="margin:2px 0 8px">Doğru olanı seçin; sayfa bu gönderiye bağlanır ve DM'de linki gider.</p>
+          <div id="pBindList" style="display:flex;flex-wrap:wrap;gap:8px"></div></div>
+      </div>
       <details class="more form-row" id="pImportWrap">
         <summary>Hazır video dosyasından (JSON) doldur</summary>
         <p class="hint" style="margin-top:0">Video için otomatik hazırlanan <code>NNN-ad.json</code> dosyasının içeriğini buraya yapıştırın; başlık, açıklama, promptlar, adımlar, ipucu ve linkler doldurulur. Kaydetmeden önce kontrol edebilirsiniz.</p>
@@ -424,7 +436,7 @@
   const PIN_KEY = "likya_admin_pin";
   const $ = (s, r = document) => r.querySelector(s);
   const state = { mode: "pin", pin: "", email: "", status: null, posts: [], generalUrl: "", logs: [], settings: null,
-                  pfilter: "all", filter: "all", logsAt: null, editId: null, slugTouched: false };
+                  drafts: [], pfilter: "all", filter: "all", logsAt: null, editId: null, slugTouched: false };
 
   // ---------- Yardımcılar
   function el(tag, attrs = {}, ...kids) {
@@ -557,7 +569,7 @@
     if (announce && results.every(r => r.status === "fulfilled")) toast("Güncellendi");
   }
   async function loadPosts(fresh) {
-    try { const r = await api("/api/posts" + (fresh ? "?fresh=1" : "")); state.posts = r.posts; state.generalUrl = r.general_url; state.mediaError = r.media_error; renderPosts(); }
+    try { const r = await api("/api/posts" + (fresh ? "?fresh=1" : "")); state.posts = r.posts; state.drafts = r.drafts || []; state.generalUrl = r.general_url; state.mediaError = r.media_error; renderPosts(); }
     catch (e) { handleErr(e, "Gönderiler yüklenemedi"); renderPostsError(e); throw e; }
   }
   async function loadLogs() {
@@ -625,7 +637,15 @@
     if (p.page.is_active === false) return el("span", { class: "pill plain", text: "Sayfa yayında değil" });
     return el("span", { class: "pill ok", text: "Sayfa hazır" + (p.page.dm_message ? " · özel DM" : " · ortak DM") });
   }
+  function renderDrafts() {
+    const box = $("#draftsBox"); box.hidden = !state.drafts.length;
+    $("#draftsList").replaceChildren(...state.drafts.map(d => el("li", { class: "row-between", style: "gap:10px;flex-wrap:wrap" },
+      el("span", { style: "min-width:0" }, el("b", { text: d.title }), " ",
+        el("span", { class: "muted", style: "font-size:13px", text: d.date ? "· " + new Date(d.date).toLocaleDateString("tr-TR") : "" })),
+      el("a", { class: "btn", href: d.page_url, target: "_blank", rel: "noopener" }, "Sayfayı aç ", icon("i-ext")))));
+  }
   function renderPosts() {
+    renderDrafts();
     $("#cntPosts").textContent = state.posts.filter(p => !p.older).length;
     const items = state.posts.filter(p => state.pfilter === "all" || (state.pfilter === "ready" ? !!p.page : !p.page));
     const grid = $("#postsGrid");
@@ -734,6 +754,10 @@
     state.editId = id;
     const page = post.page || { title: post.title.replace(/[#@].*$/, "").trim().slice(0, 80), slug: "", body: "", links: [], is_active: true };
     $("#pageDlgTitle").textContent = post.page ? "Sayfayı düzenle" : "Yeni video sayfası";
+    const bindBox = $("#pBindBox");
+    bindBox.hidden = !!post.page || !state.drafts.length;
+    $("#pBindList").replaceChildren(...state.drafts.map(d => el("button", { class: "btn", type: "button", onclick: () => bindDraft(d.slug, id) },
+      "“" + d.title + "” sayfasını bu videoya bağla")));
     $("#edHead").replaceChildren(
       post.thumb ? el("img", { src: post.thumb, alt: "", referrerpolicy: "no-referrer" }) : el("span", { class: "ph" }),
       el("div", { style: "min-width:0" }, el("div", { style: "font-weight:700;overflow-wrap:anywhere", text: post.title }),
@@ -799,6 +823,12 @@
     try { await api("/api/pages/" + encodeURIComponent(state.editId), { method: "DELETE" }); toast("Sayfa kaldırıldı"); await loadPosts(false); refreshStatus(); }
     catch (err) { handleErr(err, "Kaldırılamadı"); }
   });
+  async function bindDraft(slug, mediaId) {
+    try {
+      await api("/api/drafts/" + encodeURIComponent(slug) + "/bind/" + encodeURIComponent(mediaId), { method: "POST" });
+      dlg.close(); toast("Sayfa videoya bağlandı"); await loadPosts(false); refreshStatus();
+    } catch (err) { handleErr(err, "Bağlanamadı"); }
+  }
   async function refreshStatus() { try { state.status = await api("/api/status"); renderStatus(); } catch (_) {} }
 
   // ---------- Hareketler
@@ -819,13 +849,15 @@
       const kind = logKind(l);
       const parts = [
         el("div", { class: "item-head" },
-          el("span", { class: "tag " + kind, text: kind === "dm" ? "DM" : "Yorum" }),
+          el("span", { class: "tag " + kind, text: kind === "dm" ? "DM" : kind === "system" ? "Otomatik" : "Yorum" }),
           el("span", { class: "item-user", text: l.user || "Bilinmeyen kullanıcı" }),
           el("time", { class: "item-time", datetime: l.at || null, title: fullTime(l.at) || null, text: l.at ? relTime(l.at) : (l.time || "") })),
         el("p", { class: "quote", text: l.input || "" })];
       if (kind === "comment") {
         parts.push(el("div", { class: "reply-label", text: "Yoruma yanıt" }), el("p", { class: "reply-text", text: l.public_reply || "" }));
         parts.push(el("details", { class: "more" }, el("summary", { text: "Gönderilen DM'i göster" }), el("p", { class: "reply-text", text: l.dm_reply || "" })));
+      } else if (kind === "system") {
+        parts.push(el("p", { class: "reply-text", style: "margin-top:8px", text: l.reply || "" }));
       } else {
         parts.push(el("div", { class: "reply-label", text: "DM yanıtı" }), el("p", { class: "reply-text", text: l.dm_reply || l.reply || "" }));
       }

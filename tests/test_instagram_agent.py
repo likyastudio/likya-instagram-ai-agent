@@ -361,3 +361,118 @@ def test_logo_assets_are_served_and_used():
     page = client.get("/p/stirling-pdf").text
     assert "/brand/logo-96.png" in page and "/favicon.ico" in page
     assert client.put("/api/pages/9", headers=PIN, json={"title": "X", "slug": "brand"}).status_code == 422
+
+
+# ---------------------------------------------------------------- Video dosyası → taslak → otomatik bağlama
+
+import video_import
+
+FIX = Path(__file__).parent / "fixtures"
+
+
+def markitdown_page():
+    return video_import.page_from_video_json(json.loads((FIX / "025-markitdown.json").read_text(encoding="utf-8")))
+
+
+def media(mid, caption, ts="2026-11-16T18:00:00+0000"):
+    return {"id": mid, "title": caption.split("\n")[0][:90], "caption": caption, "media_type": "VIDEO",
+            "permalink": "", "timestamp": ts, "thumb": None}
+
+
+def set_media(monkeypatch, items):
+    ig.MEDIA_CACHE.update(at=10**12, items=items)
+    monkeypatch.setattr(ig.time, "monotonic", lambda: 10**12 + 1)
+
+
+def add_draft(page):
+    async def run():
+        data = await ig.STORE.load(force=True)
+        data["drafts"][page["slug"]] = page
+        await ig.STORE.save(data)
+    asyncio.run(run())
+
+
+def test_video_json_conversion_keeps_everything():
+    p = markitdown_page()
+    assert p["slug"] == "markitdown" and len(p["prompts"]) == 2 and len(p["links"]) == 2 and len(p["steps"]) == 5
+    assert p["prompts"][0]["label"].startswith("Kurulum ve kullanım — ") and p["tip"]
+    with pytest.raises(ValueError):
+        video_import.page_from_video_json({"title": "x"})
+
+
+def test_caption_matching_rules():
+    p = markitdown_page()
+    assert video_import.caption_matches(p, "PDF'ini yapay zekâya vermeden önce MarkItDown ile çevir 📄")
+    assert video_import.caption_matches(p, "#markitdown ile dosyalar")
+    assert not video_import.caption_matches(p, "Yapay zekâ için ücretsiz Google aracı")   # genel kelimeler eşleşmez
+    og = video_import.page_from_video_json(json.loads((FIX / "024-ogrenci.json").read_text(encoding="utf-8")))
+    assert video_import.caption_matches(og, "Öğrenciysen bu 8 aracı ücretsiz kullanabilirsin 🎓")
+
+
+def test_ambiguous_or_old_posts_are_not_bound():
+    p = markitdown_page()
+    two_posts = [media("1", "MarkItDown bölüm 1"), media("2", "MarkItDown bölüm 2")]
+    assert video_import.find_bindings({"markitdown": p}, two_posts, set()) == {}
+    old = [media("3", "MarkItDown eski video", ts="2026-10-01T10:00:00+0000")]
+    assert video_import.find_bindings({"markitdown": p}, old, set()) == {}
+    assert video_import.find_bindings({"markitdown": p}, [media("4", "MarkItDown")], {"4"}) == {}
+
+
+def test_draft_page_is_public_before_video_is_posted():
+    add_draft(markitdown_page())
+    r = client.get("/p/markitdown")
+    assert r.status_code == 200 and "pip install" in r.text and "Kopyala" in r.text
+
+
+def test_new_post_is_bound_automatically_when_panel_loads(monkeypatch):
+    add_draft(markitdown_page())
+    set_media(monkeypatch, [media("901", "Dosyanı yapay zekâya hazırla: MarkItDown 🧩")])
+    data = client.get("/api/posts", headers=PIN).json()
+    post = next(p for p in data["posts"] if p["id"] == "901")
+    assert post["page"]["slug"] == "markitdown" and post["page_url"] == f"{BASE}/markitdown"
+    assert data["drafts"] == []
+    assert ig.RECENT_LOGS[-1]["kind"] == "system"
+
+
+def test_first_comment_on_new_video_gets_its_page_link(outbox, monkeypatch):
+    add_draft(markitdown_page())
+    set_media(monkeypatch, [media("902", "MarkItDown ile PDF'i Markdown'a çevir")])
+    post_comment(media="902")
+    assert f"{BASE}/markitdown" in outbox["private"][0][1]
+
+
+def test_comment_on_unmatched_post_still_gets_general_link(outbox, monkeypatch):
+    add_draft(markitdown_page())
+    set_media(monkeypatch, [media("903", "Bugün Antalya'da çekim yaptık")])
+    post_comment(media="903")
+    assert ig.RECENT_LOGS[-1]["link"] == BASE
+    assert client.get("/api/posts", headers=PIN).json()["drafts"][0]["slug"] == "markitdown"
+
+
+def test_manual_bind_from_panel():
+    add_draft(markitdown_page())
+    assert client.post("/api/drafts/yok/bind/1", headers=PIN).status_code == 404
+    r = client.post("/api/drafts/markitdown/bind/904", headers=PIN)
+    assert r.status_code == 200 and r.json()["page_url"] == f"{BASE}/markitdown"
+    add_draft({**markitdown_page(), "slug": "ikinci"})
+    assert client.post("/api/drafts/ikinci/bind/904", headers=PIN).status_code == 409
+    assert client.put("/api/pages/905", headers=PIN, json={"title": "X", "slug": "ikinci"}).status_code == 409
+
+
+def test_video_page_command_adds_draft(monkeypatch, tmp_path, capsys):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("video_page", Path(__file__).parent.parent / "scripts" / "video_page.py")
+    cmd = importlib.util.module_from_spec(spec); spec.loader.exec_module(cmd)
+    store = {"settings": {}, "pages": {"1": {"slug": "eski"}}, "drafts": {}}
+    writes = []
+    monkeypatch.setattr(cmd, "read_store", lambda: (json.loads(json.dumps(store)), "42"))
+    monkeypatch.setattr(cmd, "write_store", lambda data, gen: writes.append((data, gen)))
+    cmd.cmd_add(str(FIX / "025-markitdown.json"), None)
+    data, gen = writes[-1]
+    assert gen == "42" and "markitdown" in data["drafts"] and "markitdown" in capsys.readouterr().out
+    cmd.cmd_add(str(FIX / "025-markitdown.json"), "777")
+    data, _ = writes[-1]
+    assert data["pages"]["777"]["slug"] == "markitdown" and "markitdown" not in data["drafts"]
+    store["pages"]["2"] = {"slug": "markitdown"}
+    with pytest.raises(SystemExit):
+        cmd.cmd_add(str(FIX / "025-markitdown.json"), None)

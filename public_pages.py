@@ -17,58 +17,80 @@ SITE_URL = "https://likyastudios.live"
 SITE_NAME = "Likya Studios"
 
 CSS = """
-:root{--bg:#f6f1e8;--card:#fffdf9;--line:#e2d8c9;--ink:#1c1917;--muted:#5f564d;--accent:#b4532a;--fill:#c75a2c;--focus:#1d4ed8;
- --night:#0b1630;--night2:#12224a;--sea:#1f6fb2;--turq:#3fd0c9;--gold:#c9a24a;--cream:#f4ecd8}
-@media (prefers-color-scheme:dark){:root{--bg:#151210;--card:#1e1a17;--line:#3a332d;--ink:#f3ede4;--muted:#b5aa9d;--accent:#f0a274;--fill:#d0662f;--focus:#93b4ff}}
-*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-a{color:var(--accent)}:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:10px}
-.wrap{max-width:600px;margin:0 auto;padding:16px 16px 40px}
-.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-weight:700;margin-bottom:16px;min-height:44px}
-.mark{width:40px;height:40px;border-radius:50%;display:block;flex:none;box-shadow:0 1px 4px rgba(0,0,0,.25)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 4px 18px rgba(28,25,23,.06)}
-.hero{display:flex;gap:14px;align-items:center;padding:14px}
-.hero img{width:84px;height:105px;border-radius:12px;object-fit:cover;flex:none;background:var(--line)}
-h1{font-size:23px;line-height:1.25;margin:0}
-h2{font-size:18px;margin:26px 0 10px}
-.lead{margin:14px 2px 0;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
-.stack{display:grid;gap:12px}
-/* Prompt kartı */
-.prompt{background:var(--night);color:var(--cream);border-radius:20px;overflow:hidden;border:1px solid var(--night2)}
-.prompt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 14px 0 16px}
-.prompt-label{font:600 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.16em;color:var(--gold)}
-.prompt-tool{margin:4px 0 0;font-size:13px;color:rgba(244,236,216,.72)}
-.copy{flex:none;min-height:44px;min-width:104px;padding:0 14px;border-radius:999px;border:0;background:var(--turq);color:var(--night);font-weight:800;cursor:pointer;font-size:14px}
-.copy[data-state=ok]{background:var(--gold)}
-.prompt-text{margin:12px;padding:14px 16px;border-radius:14px;background:var(--night2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.75;
- -webkit-user-select:all;user-select:all;border-left:3px solid var(--sea)}
-.copy-hint{margin:0 16px 12px;font-size:13px;color:var(--turq);min-height:0}
+:root{--paper:#efe7d2;--bone:#f7f1de;--ink:#15140f;--muted:#5a5448;--line:rgba(21,20,15,.14);--ember:#ad4030;--focus:#1f6fb2;
+ --night:#0b1630;--night2:#12224a;--sea:#1f6fb2;--turq:#3fd0c9;--gold:#c9a24a;--cream:#f4ecd8;--cream70:rgba(244,236,216,.72)}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%;color-scheme:light}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+a{color:inherit}:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:12px}
+.wrap{max-width:672px;margin:0 auto;padding:12px 20px 48px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;margin-bottom:8px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:800;letter-spacing:-.01em;min-height:44px}
+.mark{width:36px;height:36px;border-radius:50%;display:block;flex:none;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.back{display:inline-flex;white-space:nowrap;align-items:center;gap:6px;min-height:44px;font-size:14px;color:var(--muted);text-decoration:none}
+.back svg{width:18px;height:18px}
+.eyebrow{margin:0;font:600 11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.14em;color:var(--ember)}
+.head{display:flex;gap:16px;align-items:flex-start;padding:8px 0 22px}
+.head img{width:76px;height:95px;border-radius:14px;object-fit:cover;flex:none;background:var(--bone);box-shadow:0 10px 24px -14px rgba(11,22,48,.6)}
+h1{margin:8px 0 0;font-size:clamp(28px,7vw,44px);line-height:1.08;letter-spacing:-.025em;font-weight:800;overflow-wrap:anywhere}
+h2{margin:30px 0 12px;font-size:24px;line-height:1.2;letter-spacing:-.015em;font-weight:700}
+.lead{margin:0 0 6px;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
+.stack{display:grid;gap:18px}
+/* Prompt kartı: gece laciverti, turkuaz etiket, antik altın Kopyala */
+.prompt{background:linear-gradient(160deg,var(--night) 0%,var(--night2) 100%);color:var(--cream);border-radius:24px;overflow:hidden;
+ box-shadow:0 18px 40px -24px rgba(11,22,48,.7)}
+.prompt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:20px 20px 0}
+.prompt-label{font:600 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.18em;color:var(--turq)}
+.prompt-tool{margin:4px 0 0;font-size:13px;color:var(--cream70)}
+.copy{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 20px;border-radius:999px;border:0;background:var(--gold);
+ color:var(--night);font-weight:700;font-size:14px;cursor:pointer;transition:transform .1s}
+.copy:active{transform:scale(.97)}.copy[data-state=ok]{background:var(--turq)}
+.copy svg{width:16px;height:16px}
+.prompt-text{margin:16px 12px 12px;padding:16px;border-radius:16px;background:rgba(244,236,216,.06);border:1px solid rgba(31,111,178,.33);
+ white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.75;-webkit-user-select:all;user-select:all}
+.copy-hint{margin:0 20px 14px;font-size:13px;color:var(--turq)}.copy-hint:empty{display:none}
 /* Adımlar ve ipucu */
-.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
-.steps li{display:flex;gap:12px;align-items:flex-start}
-.steps li::before{counter-increment:s;content:counter(s);flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
- background:var(--sea);color:#fff;font-weight:800;font-size:14px;margin-top:-1px}
-.tip{display:flex;gap:10px;padding:14px 16px;border-radius:16px;background:rgba(201,162,74,.16);border:1px solid rgba(201,162,74,.45);overflow-wrap:anywhere}
-.tip b{color:var(--gold);flex:none}
-/* Bağlantılar */
-.links{display:grid;gap:10px;margin:0;padding:0;list-style:none}
-.link{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:60px;padding:12px 16px;border-radius:16px;
- background:var(--night);color:var(--cream);text-decoration:none;font-weight:700;overflow-wrap:anywhere;border:1px solid var(--night2)}
-.link small{display:block;font-weight:500;font-size:13px;color:rgba(244,236,216,.72)}
-.link .host{display:block;font:500 12px ui-monospace,Menlo,monospace;color:var(--turq);margin-top:2px}
-.link svg{flex:none;width:20px;height:20px;color:var(--turq)}
+.steps{margin:0;padding:0;list-style:none;display:grid;gap:12px;counter-reset:s}
+.steps li{display:flex;gap:12px;align-items:flex-start;line-height:1.6}
+.steps li::before{counter-increment:s;content:counter(s);flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+ background:var(--night);color:var(--gold);font:700 12px ui-monospace,Menlo,monospace;margin-top:1px}
+.tip{display:flex;gap:12px;align-items:flex-start;margin:20px 0 0;padding:16px 20px;border-radius:18px;background:rgba(63,208,201,.13);
+ border:1px solid rgba(63,208,201,.4);font-size:15px;line-height:1.7;overflow-wrap:anywhere}
+.tip svg{flex:none;width:20px;height:20px;margin-top:3px;color:var(--sea)}
+/* Bağlantı kartları */
+.links{display:grid;gap:12px;margin:0;padding:0;list-style:none}
+.link{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;padding:16px 20px;border-radius:20px;
+ background:var(--night);color:var(--cream);text-decoration:none;transition:transform .15s}
+.link:hover{transform:translateY(-2px)}
+.link-label{display:block;font-size:18px;font-weight:700;line-height:1.3}
+.link .host{display:block;margin-top:2px;font:500 12px ui-monospace,Menlo,monospace;color:var(--turq);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link small{display:block;margin-top:2px;font-size:13px;color:var(--cream70)}
+.link svg{flex:none;width:20px;height:20px;color:var(--gold)}
+.link>span{min-width:0}
+/* Kapanış kutusu */
+.cta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;margin-top:40px;padding:24px;border-radius:28px;
+ background:linear-gradient(135deg,var(--night),var(--sea));color:var(--cream)}
+.cta p{margin:0}.cta b{display:block;font-size:20px;line-height:1.3}.cta span{font-size:14px;color:rgba(244,236,216,.8)}
+.cta a{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 20px;border-radius:999px;background:var(--gold);color:var(--night);
+ font-weight:700;font-size:14px;text-decoration:none}
 /* Liste */
-.list{display:grid;gap:12px;margin:0;padding:0;list-style:none}
-.row{display:flex;gap:14px;align-items:center;padding:12px;min-height:88px;text-decoration:none;color:var(--ink)}
-.row img,.row .ph{width:64px;height:80px;border-radius:12px;object-fit:cover;flex:none;background:var(--line)}
-.row b{display:block;line-height:1.3}.row span{color:var(--muted);font-size:14px}
-.foot{margin-top:28px;text-align:center;color:var(--muted);font-size:14px}
+.list{display:grid;gap:14px;margin:0;padding:0;list-style:none}
+.row{display:flex;gap:16px;align-items:center;padding:14px;min-height:96px;border-radius:24px;text-decoration:none;background:var(--night);
+ color:var(--cream);transition:transform .15s}
+.row:hover{transform:translateY(-3px)}
+.row img,.row .ph{width:64px;height:80px;border-radius:12px;object-fit:cover;flex:none;background:var(--night2)}
+.row b{display:block;font-size:17px;line-height:1.3}.row .meta{display:block;margin-top:4px;font:600 11px ui-monospace,Menlo,monospace;
+ text-transform:uppercase;letter-spacing:.12em;color:var(--turq)}
+.row .go{display:block;margin-top:8px;font-size:14px;font-weight:700;color:var(--gold)}
+.empty{padding:28px 20px;border-radius:24px;background:var(--bone);text-align:center;color:var(--muted)}
+.foot{margin-top:32px;text-align:center;color:var(--muted);font-size:14px}
 .foot a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px}
-.empty{padding:28px 20px;text-align:center;color:var(--muted)}
 """
 
-ARROW = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" '
-         'stroke-linecap="round" stroke-linejoin="round" d="M7 17L17 7M9 7h8v8"/></svg>')
+_SVG = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" '
+        'stroke-linecap="round" stroke-linejoin="round" d="{}"/></svg>')
+ARROW = _SVG.format("M7 17L17 7M9 7h8v8")
+BULB = _SVG.format("M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z")
+BACK = _SVG.format("M15 18l-6-6 6-6")
 
 # Kopyala: Clipboard API → execCommand yedeği → "basılı tutup kopyala" uyarısı (Instagram tarayıcısı için)
 COPY_JS = """<script>
@@ -101,15 +123,16 @@ def asset_root(base_url: str) -> str:
 
 
 def _shell(title: str, description: str, inner: str, image: str | None = None, canonical: str | None = None,
-           script: str = "", root: str = "") -> str:
+           script: str = "", root: str = "", back_url: str | None = None) -> str:
     image = image or (f"{root}/brand/og.png" if root else None)
     og_img = (f'<meta property="og:image" content="{escape(image)}"><meta name="twitter:card" content="summary_large_image">'
               if image else "")
     canon = f'<link rel="canonical" href="{escape(canonical)}">' if canonical else ""
+    back = f'<a class="back" href="{escape(back_url)}">{BACK}Tüm kaynaklar</a>' if back_url else ""
     return f"""<!DOCTYPE html>
 <html lang="tr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="light"><meta name="theme-color" content="#efe7d2">
 <title>{escape(title)}</title>
 <meta name="description" content="{escape(description[:160])}">
 <meta property="og:title" content="{escape(title)}"><meta property="og:description" content="{escape(description[:160])}">
@@ -119,9 +142,11 @@ def _shell(title: str, description: str, inner: str, image: str | None = None, c
 <link rel="apple-touch-icon" href="{root}/brand/logo-192.png">
 <style>{CSS}</style>
 </head><body><main class="wrap">
-<a class="brand" href="{SITE_URL}"><img class="mark" src="{root}/brand/logo-96.png" alt="" width="40" height="40">{SITE_NAME}</a>
+<div class="top"><a class="brand" href="{SITE_URL}"><img class="mark" src="{root}/brand/logo-96.png" alt="" width="36" height="36">{SITE_NAME}</a>{back}</div>
 {inner}
-<p class="foot"><a href="{SITE_URL}">likyastudios.live</a> · <a href="https://www.instagram.com/likyastudios/">Instagram'da takip et</a></p>
+<div class="cta"><p><b>Denedin mi?</b><span>Sonucu Instagram'da @likyastudios etiketiyle paylaş, görelim.</span></p>
+<a href="https://www.instagram.com/likyastudios/">@likyastudios</a></div>
+<p class="foot"><a href="{SITE_URL}">likyastudios.live</a></p>
 </main>{script}</body></html>"""
 
 
@@ -134,8 +159,9 @@ def _links_html(links: list[dict]) -> str:
         host = urlparse(url).netloc.removeprefix("www.")
         label = (link.get("label") or "").strip() or host
         note = (link.get("note") or "").strip()
-        out.append(f'<li><a class="link" href="{escape(url)}" target="_blank" rel="noopener nofollow"><span>{escape(label)}'
-                   f'{f"<small>{escape(note)}</small>" if note else ""}<span class="host">{escape(host)}</span></span>{ARROW}</a></li>')
+        out.append(f'<li><a class="link" href="{escape(url)}" target="_blank" rel="noopener nofollow"><span>'
+                   f'<span class="link-label">{escape(label)}</span><span class="host">{escape(host)}</span>'
+                   f'{f"<small>{escape(note)}</small>" if note else ""}</span>{ARROW}</a></li>')
     return f'<ul class="links">{"".join(out)}</ul>' if out else ""
 
 
@@ -160,7 +186,8 @@ def render_video_page(page: dict, thumb: str | None, base_url: str, index_url: s
     tip = (page.get("tip") or "").strip()
     links = _links_html(page.get("links") or [])
     img = f'<img src="{escape(thumb)}" alt="" referrerpolicy="no-referrer">' if thumb else ""
-    sections = [f'<div class="card hero">{img}<h1>{escape(title)}</h1></div>']
+    eyebrow = "Videodaki promptlar" if prompts else "Videodaki bağlantılar" if links else "Video kaynakları"
+    sections = [f'<header class="head">{img}<div><p class="eyebrow">{eyebrow}</p><h1>{escape(title)}</h1></div></header>']
     if body:
         sections.append(f'<p class="lead">{escape(body)}</p>')
     if links and not prompts:   # sadece link sayfası: linkler en üstte
@@ -170,13 +197,12 @@ def render_video_page(page: dict, thumb: str | None, base_url: str, index_url: s
     if steps:
         sections.append('<h2>Nasıl kullanılır?</h2><ol class="steps">' + "".join(f"<li><span>{escape(s)}</span></li>" for s in steps) + "</ol>")
     if tip:
-        sections.append(f'<p class="tip" style="margin-top:20px"><b>İpucu</b><span>{escape(tip)}</span></p>')
+        sections.append(f'<p class="tip">{BULB}<span>{escape(tip)}</span></p>')
     if links and prompts:
         sections.append(f'<h2>Bağlantılar</h2>{links}')
-    sections.append(f'<p class="foot" style="margin-top:22px"><a href="{escape(index_url)}">Diğer videoların kaynakları →</a></p>')
     return _shell(f"{title} — {SITE_NAME}", body or title, "\n".join(sections), image=thumb,
                   canonical=f"{base_url}/{page.get('slug', '')}", script=COPY_JS if prompts else "",
-                  root=asset_root(base_url))
+                  root=asset_root(base_url), back_url=index_url)
 
 
 def render_index(title: str, intro: str, items: list[dict], base_url: str) -> str:
@@ -191,19 +217,20 @@ def render_index(title: str, intro: str, items: list[dict], base_url: str) -> st
                 parts.append(f'{it["prompt_count"]} prompt')
             if it.get("link_count"):
                 parts.append(f'{it["link_count"]} bağlantı')
-            rows.append(f'<li><a class="card row" href="{escape(it["href"])}">{img}'
-                        f'<span><b>{escape(it["title"])}</b><span>{" · ".join(parts) or "Kaynaklar"}</span></span></a></li>')
+            rows.append(f'<li><a class="row" href="{escape(it["href"])}">{img}'
+                        f'<span><span class="meta">{" · ".join(parts) or "Kaynaklar"}</span><b>{escape(it["title"])}</b>'
+                        f'<span class="go">Aç →</span></span></a></li>')
         listing = f'<ul class="list">{"".join(rows)}</ul>'
     else:
-        listing = '<div class="card empty">Henüz paylaşılan bir kaynak yok.</div>'
-    inner = f"""<h1>{escape(title)}</h1>
-{f'<p class="lead" style="margin-bottom:18px">{escape(intro)}</p>' if intro else '<div style="height:16px"></div>'}
+        listing = '<div class="empty">Henüz paylaşılan bir kaynak yok.</div>'
+    inner = f"""<header class="head"><div><p class="eyebrow">Video kaynakları</p><h1>{escape(title)}</h1></div></header>
+{f'<p class="lead" style="margin-bottom:22px">{escape(intro)}</p>' if intro else ''}
 {listing}"""
     return _shell(title, intro or title, inner, canonical=base_url, root=asset_root(base_url))
 
 
 def render_not_found(index_url: str) -> str:
     root = asset_root(index_url)
-    inner = (f'<div class="card empty"><h1>Sayfa bulunamadı</h1><p>Bu bağlantı kaldırılmış olabilir.</p>'
+    inner = (f'<div class="empty"><h1 style="font-size:28px">Sayfa bulunamadı</h1><p>Bu bağlantı kaldırılmış olabilir.</p>'
              f'<p><a href="{escape(index_url)}">Tüm video kaynaklarına git</a></p></div>')
     return _shell(f"Sayfa bulunamadı — {SITE_NAME}", "Sayfa bulunamadı", inner, root=root)

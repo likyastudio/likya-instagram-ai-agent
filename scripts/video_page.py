@@ -67,6 +67,10 @@ def cmd_add(path: str, media_id: str | None, site: bool = False) -> None:
             raise SystemExit(f"'{slug}' zaten {mid} gönderisinin sayfası. Güncellemek için: --media-id {mid}")
     if media_id:
         page["bound_at"] = "komut"
+        prev = data["pages"].get(media_id) or {}
+        olds = [x for x in (prev.get("old_slugs") or []) + ([prev["slug"]] if prev.get("slug") else []) if x != slug]
+        if olds:
+            page["old_slugs"] = olds[-10:]   # eski DM linkleri yeni sayfaya yönlenir
         data["drafts"].pop(slug, None)
         data["pages"][media_id] = page
         where = f"gönderi {media_id}"

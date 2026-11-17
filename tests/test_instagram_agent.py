@@ -496,3 +496,12 @@ def test_bound_draft_with_site_link_sends_site_url(outbox, monkeypatch):
     set_media(monkeypatch, [media("906", "Öğrenciysen bu 8 aracı ücretsiz kullan 🎓", ts="2026-11-15T17:00:00+0000")])
     post_comment(media="906")
     assert "https://likyastudios.live/prompt/ogrenci" in outbox["private"][0][1]
+
+
+def test_old_slug_redirects_after_rename():
+    client.put("/api/pages/18121864655327295", headers=PIN, json={"title": "Örgü", "slug": "orgu-yemek-yeni"})
+    r = client.get("/p/orgu-yemek", follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"].endswith("/orgu-yemek-yeni")
+    client.put("/api/pages/18121864655327295", headers=PIN, json={"title": "Örgü", "slug": "orgu-yemek-yeni",
+                                                               "external_url": "https://likyastudios.live/prompt/orgu-yemek"})
+    assert client.get("/p/orgu-yemek", follow_redirects=False).headers["location"] == "https://likyastudios.live/prompt/orgu-yemek"

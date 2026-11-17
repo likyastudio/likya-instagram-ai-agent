@@ -31,7 +31,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 import auth
 import public_pages
@@ -601,6 +601,10 @@ async def save_page_api(media_id: str, request: Request):
     for mid, other in data["pages"].items():
         if mid != media_id and other.get("slug") == page["slug"]:
             raise HTTPException(status_code=409, detail=f"“{page['slug']}” adresi başka bir videoda kullanılıyor.")
+    prev = data["pages"].get(media_id) or {}
+    olds = [x for x in (prev.get("old_slugs") or []) + ([prev["slug"]] if prev.get("slug") else []) if x != page["slug"]]
+    if olds:
+        page["old_slugs"] = olds[-10:]
     data["pages"][media_id] = page
     try:
         await STORE.save(data)
@@ -759,6 +763,9 @@ async def _public_page(slug: str) -> HTMLResponse:
             thumb = (await _thumbs()).get(mid)
             return HTMLResponse(public_pages.render_video_page(page, thumb, public_base(), public_base()),
                                 headers={"Cache-Control": "public, max-age=60"})
+    for page in data["pages"].values():        # adresi değişmiş sayfa: eski linkler yeni sayfaya gitsin
+        if slug in (page.get("old_slugs") or []):
+            return RedirectResponse(page_url(page), status_code=301)
     draft = data.get("drafts", {}).get(slug)   # video henüz paylaşılmadıysa da sayfa açılır
     if draft and draft.get("is_active", True):
         return HTMLResponse(public_pages.render_video_page(draft, None, public_base(), public_base()),

@@ -505,3 +505,55 @@ def test_old_slug_redirects_after_rename():
     client.put("/api/pages/18121864655327295", headers=PIN, json={"title": "Örgü", "slug": "orgu-yemek-yeni",
                                                                "external_url": "https://likyastudios.live/prompt/orgu-yemek"})
     assert client.get("/p/orgu-yemek", follow_redirects=False).headers["location"] == "https://likyastudios.live/prompt/orgu-yemek"
+
+
+# ---------------------------------------------------------------- Kart (generic template) DM
+
+@pytest.fixture
+def cards(monkeypatch):
+    sent = []
+
+    async def card(cid, payload):
+        sent.append((cid, payload)); return True
+    monkeypatch.setattr(ig, "send_private_reply_card", card)
+    return sent
+
+
+def test_comment_dm_is_a_card_with_the_video_link(outbox, cards):
+    post_comment()
+    assert outbox["private"] == []                       # düz metin gönderilmedi
+    cid, payload = cards[0]
+    el = payload["attachment"]["payload"]["elements"][0]
+    assert payload["attachment"]["payload"]["template_type"] == "generic"
+    assert el["title"] == "Örgü yemek videosu promptları"
+    assert el["default_action"]["url"] == el["buttons"][0]["url"] == f"{BASE}/orgu-yemek"
+    assert el["buttons"][0]["title"] == "Bağlantıyı aç" and el["image_url"].endswith("/brand/og.png")
+    assert ig.RECENT_LOGS[-1]["dm_kind"] == "card" and ig.RECENT_LOGS[-1]["dm_ok"]
+
+
+def test_card_failure_falls_back_to_text(outbox, monkeypatch):
+    async def failing(cid, payload):
+        return False
+    monkeypatch.setattr(ig, "send_private_reply_card", failing)
+    post_comment()
+    assert f"{BASE}/orgu-yemek" in outbox["private"][0][1] and ig.RECENT_LOGS[-1]["dm_kind"] == "text"
+
+
+def test_text_format_setting_skips_card(outbox, cards):
+    client.post("/api/settings", headers=PIN, json={"public_reply": "ok", "dm_template": "Link: {link}", "dm_format": "text"})
+    post_comment()
+    assert cards == [] and outbox["private"][0][1] == f"Link: {BASE}/orgu-yemek"
+
+
+def test_card_uses_custom_texts_and_limits(outbox, cards):
+    client.post("/api/settings", headers=PIN, json={"public_reply": "ok", "dm_template": "x {link}",
+                                                    "card_subtitle": "Promptlar hazır ✨", "card_button": "Aç"})
+    client.put("/api/pages/18121864655327295", headers=PIN, json={"title": "Ö" * 120, "slug": "orgu-yemek"})
+    post_comment()
+    el = cards[0][1]["attachment"]["payload"]["elements"][0]
+    assert el["subtitle"] == "Promptlar hazır ✨" and el["buttons"][0]["title"] == "Aç" and len(el["title"]) <= 80
+
+
+def test_card_text_strips_links():
+    assert ig.card_text("Merhaba! İşte: {link}  https://x.com/a", 80) == "Merhaba! İşte:"
+    assert ig.card_text("a" * 100, 20).endswith("…") and len(ig.card_text("a" * 100, 20)) == 20

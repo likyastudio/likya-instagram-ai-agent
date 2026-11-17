@@ -320,6 +320,39 @@ async def send_private_reply(comment_id: str, text: str) -> bool:
                              "Yorum sonrası özel DM")
 
 
+CARD_DEFAULTS = {"dm_format": "card", "card_subtitle": "İstediğin bağlantılar burada 👇", "card_button": "Bağlantıyı aç"}
+
+
+def card_text(value: str, limit: int) -> str:
+    """Kart alanları için: {link} ve fazla boşlukları temizler, Instagram sınırına göre kısaltır."""
+    text = re.sub(r"https?://\S+|\{link\}|\{title\}", "", value or "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def card_image_url(settings: dict) -> str:
+    return (settings.get("card_image_url") or "").strip() or f"{public_pages.asset_root(public_base())}/brand/og.png"
+
+
+def build_card(title: str, subtitle: str, link: str, button: str, image: str) -> dict:
+    """Instagram 'generic template': görsel + başlık + kısa açıklama + tek dokunuşla açılan düğme."""
+    element = {
+        "title": card_text(title, 80) or "Likya Studios",
+        "image_url": image,
+        "default_action": {"type": "web_url", "url": link},
+        "buttons": [{"type": "web_url", "url": link, "title": card_text(button, 20) or "Bağlantıyı aç"}],
+    }
+    sub = card_text(subtitle, 80)
+    if sub:
+        element["subtitle"] = sub
+    return {"attachment": {"type": "template", "payload": {"template_type": "generic", "elements": [element]}}}
+
+
+async def send_private_reply_card(comment_id: str, card: dict) -> bool:
+    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{IG_ACCOUNT_ID or 'me'}/messages"
+    return await _graph_post(url, {"recipient": {"comment_id": comment_id}, "message": card}, "Yorum sonrası kart DM")
+
+
 # ---------------------------------------------------------------- Taslakların gönderilere otomatik bağlanması
 
 async def auto_bind_drafts(media: list[dict]) -> list[tuple[str, str]]:
@@ -380,7 +413,22 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
                          page["title"] if page else settings.get("general_title", ""))
 
     comment_ok = await reply_to_comment(comment_id, public_reply)
-    dm_ok = await send_private_reply(comment_id, dm_reply)
+    fmt = settings.get("dm_format") or CARD_DEFAULTS["dm_format"]
+    dm_kind = "text"
+    dm_ok = False
+    if fmt == "card":
+        # Kart: başlık = video adı, açıklama = gönderiye özel DM metni ya da ortak kart açıklaması
+        subtitle = card_text(page.get("dm_message", ""), 80) if page and page.get("dm_message") else             settings.get("card_subtitle") or CARD_DEFAULTS["card_subtitle"]
+        card = build_card(page["title"] if page else (settings.get("general_title") or "Likya Studios"),
+                          subtitle, link, settings.get("card_button") or CARD_DEFAULTS["card_button"],
+                          card_image_url(settings))
+        dm_ok = await send_private_reply_card(comment_id, card)
+        if dm_ok:
+            dm_kind = "card"
+            dm_reply = f"[Kart] {card['attachment']['payload']['elements'][0]['title']} — {subtitle} → {link}"
+    if not dm_ok:
+        # Kart gönderilemezse (veya düz metin seçiliyse) eski usul metin mesajı gider
+        dm_ok = await send_private_reply(comment_id, dm_reply)
     status_tag = "✅" if (comment_ok and dm_ok) else ("⚠️" if (comment_ok or dm_ok) else "❌")
     RECENT_LOGS.append({
         "time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
@@ -388,7 +436,7 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
         "user": f"@{username}" if username else comment_id, "media_id": media_id,
         "input": text, "public_reply": public_reply, "dm_reply": dm_reply,
         "reply": f"Yorum: {public_reply} | DM: {dm_reply[:60]}...",
-        "rule": target, "link": link, "comment_ok": comment_ok, "dm_ok": dm_ok,
+        "rule": target, "link": link, "comment_ok": comment_ok, "dm_ok": dm_ok, "dm_kind": dm_kind,
         "matched_rule": f"{target} {status_tag}",
     })
 
@@ -630,7 +678,7 @@ async def delete_page_api(media_id: str, request: Request):
 async def get_settings_api(request: Request):
     require_admin(request)
     s = (await STORE.load())["settings"]
-    return {**s, "ai_prompt": s.get("ai_prompt") or load_file_prompt()}
+    return {**CARD_DEFAULTS, **s, "ai_prompt": s.get("ai_prompt") or load_file_prompt(), "card_image": card_image_url(s)}
 
 
 @app.post("/api/settings")
@@ -652,6 +700,9 @@ async def save_settings_api(request: Request):
         "general_title": str(raw.get("general_title") or "").strip()[:120] or data["settings"].get("general_title", ""),
         "general_intro": str(raw.get("general_intro") or "").strip()[:500],
         "ai_prompt": str(raw.get("ai_prompt") or "").strip()[:8000],
+        "dm_format": "text" if raw.get("dm_format") == "text" else "card",
+        "card_subtitle": str(raw.get("card_subtitle") or "").strip()[:80] or CARD_DEFAULTS["card_subtitle"],
+        "card_button": str(raw.get("card_button") or "").strip()[:20] or CARD_DEFAULTS["card_button"],
     })
     try:
         await STORE.save(data)

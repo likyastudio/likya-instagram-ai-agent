@@ -4,7 +4,10 @@
     "dm_template": "Merhaba! 👋 İstediğin bağlantılar bu sayfada:\n{link}\n\nKaydetmeyi unutma 🔖",
     "general_title": "Likya Studios — Video Kaynakları",
     "general_intro": "Videolarımızda bahsettiğimiz araçların ve kaynakların bağlantıları. İzlediğin videoyu listeden seç.",
-    "ai_prompt": ""
+    "ai_prompt": "",
+    "dm_format": "card",
+    "card_subtitle": "İstediğin bağlantılar burada 👇",
+    "card_button": "Bağlantıyı aç"
   },
   "pages": {
     "18121864655327295": {

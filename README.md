@@ -37,8 +37,9 @@
    ```
 
 3. Video Instagram'da paylaşılır. Açıklamasında taslağın adı geçiyorsa (ör. "MarkItDown") sistem sayfayı
-   o gönderiye **kendiliğinden bağlar** (panel açıldığında veya videoya ilk yorum geldiğinde) ve yorum
-   yapanlara bu sayfanın linki gider. Kesin olmayan eşleşmede bağlanmaz; panelde gönderiyi açıp
+   o gönderiye **kendiliğinden bağlar** (panel açıldığında veya videoya ilk yorum geldiğinde). O videoya yorum
+   yapanlara DM'de **o videonun** sayfası gider: varsayılan `likyastudios.live/prompt/<slug>`
+   (ana sitede sayfası yoksa `--no-site` ile `link.likyastudios.live/<slug>`). Kesin olmayan eşleşmede bağlanmaz; panelde gönderiyi açıp
    "Hazır taslağı bağla" denir. Gönderi kimliği biliniyorsa: `add dosya.json --media-id <id>`.
 
 `python scripts/video_page.py list` sayfaları ve bekleyen taslakları gösterir.

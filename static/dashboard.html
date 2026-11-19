@@ -313,6 +313,13 @@
           <div class="card set-card">
             <h3>DM mesajı</h3>
             <p>Yorum yapan kişiye özelden gider ve o videonun sayfasını açar.</p>
+            <label class="field" for="sGate">Takip kontrolü</label>
+            <select class="input" id="sGate">
+              <option value="off">Kapalı: link herkese hemen gider</option>
+              <option value="on">Açık: link sadece takip edenlere gider</option>
+            </select>
+            <p class="hint" id="sGateHint">Açıkken DM'e önce “Linki gönder” düğmesi gider. Kişi basınca takip edip etmediğine bakılır; takip etmiyorsa takip etmesi istenir. Instagram takip bilgisini vermezse kimse mağdur olmasın diye link yine gönderilir.</p>
+            <div style="height:12px"></div>
             <label class="field" for="sFormat">Mesaj biçimi</label>
             <select class="input" id="sFormat">
               <option value="card">Kart: görsel + düğme (önerilen)</option>
@@ -899,7 +906,7 @@
   }));
 
   // ---------- Mesaj ayarları
-  const SFIELDS = { sReply: "public_reply", sFormat: "dm_format", sSub: "card_subtitle", sBtn: "card_button", sDm: "dm_template",
+  const SFIELDS = { sReply: "public_reply", sFormat: "dm_format", sSub: "card_subtitle", sBtn: "card_button", sDm: "dm_template", sGate: "follow_gate",
                     sGTitle: "general_title", sGIntro: "general_intro", sAi: "ai_prompt" };
   function fillSettings() {
     for (const [id, key] of Object.entries(SFIELDS)) $("#" + id).value = state.settings[key] || "";

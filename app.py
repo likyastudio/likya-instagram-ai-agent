@@ -87,6 +87,8 @@ GENERAL_KEY = "__general__"
 DM_HISTORY: dict[str, deque] = defaultdict(lambda: deque(maxlen=15))
 SEEN_EVENT_IDS: deque = deque(maxlen=1000)
 RECENT_LOGS: deque = deque(maxlen=50)
+# Takip kontrolü açıkken: düğmeye basan kişinin hangi videonun linkini beklediği (IGSID -> media_id)
+PENDING_LINKS: dict[str, str] = {}
 
 STARTED_AT = datetime.now(timezone.utc)
 STATS: dict = {
@@ -348,6 +350,48 @@ def build_card(title: str, subtitle: str, link: str, button: str, image: str) ->
     return {"attachment": {"type": "template", "payload": {"template_type": "generic", "elements": [element]}}}
 
 
+GATE = {
+    "ask": "Linki almak için aşağıdaki düğmeye bas 👇",
+    "button": "Linki gönder",
+    "ask_text": "Linki almak için bu sohbete LİNK yaz 👇",
+    "not_following": "Linki gönderebilmem için önce @{account} hesabını takip etmen gerekiyor 🙏 Takip ettikten sonra düğmeye tekrar bas.",
+    "type_link": "Linki gönderebilmem için bu sohbete LİNK yazar mısın?",
+}
+LINK_WORDS = {"link", "lınk", "linki", "linkı", "linki gönder", "link gönder", "link lütfen"}
+
+
+def build_gate_card(title: str, image: str, media_id: str) -> dict:
+    """Takip kontrolü: link yerine 'Linki gönder' düğmesi. Basınca postback olarak geri döner."""
+    element = {"title": card_text(title, 80) or "Likya Studios", "image_url": image,
+               "subtitle": card_text(GATE["ask"], 80),
+               "buttons": [{"type": "postback", "title": GATE["button"], "payload": f"LINK:{media_id}"}]}
+    return {"attachment": {"type": "template", "payload": {"template_type": "generic", "elements": [element]}}}
+
+
+async def send_dm_message(recipient_id: str, message: dict) -> bool:
+    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{IG_ACCOUNT_ID or 'me'}/messages"
+    return await _graph_post(url, {"recipient": {"id": recipient_id}, "message": message}, "DM kart gönderme")
+
+
+async def check_follows(igsid: str) -> bool | None:
+    """Kişi hesabı takip ediyor mu? True/False; Meta bilgi vermezse (izin yok, hata) None."""
+    if not IG_PAGE_ACCESS_TOKEN or not igsid:
+        return None
+    url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{igsid}"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(url, params={"fields": "is_user_follow_business"},
+                                 headers={"Authorization": f"Bearer {IG_PAGE_ACCESS_TOKEN}"})
+        if r.status_code >= 400:
+            logger.error(f"Takip kontrolü hatası ({r.status_code}): {r.text}")
+            return None
+        value = r.json().get("is_user_follow_business")
+        return value if isinstance(value, bool) else None
+    except Exception as e:
+        logger.error(f"Takip kontrolü istek hatası: {e}")
+        return None
+
+
 async def send_private_reply_card(comment_id: str, card: dict) -> bool:
     url = f"https://graph.facebook.com/{IG_GRAPH_VERSION}/{IG_ACCOUNT_ID or 'me'}/messages"
     return await _graph_post(url, {"recipient": {"comment_id": comment_id}, "message": card}, "Yorum sonrası kart DM")
@@ -416,7 +460,16 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
     fmt = settings.get("dm_format") or CARD_DEFAULTS["dm_format"]
     dm_kind = "text"
     dm_ok = False
-    if fmt == "card":
+    if settings.get("follow_gate"):
+        # Takip kontrolü: link hemen gitmez; kişi düğmeye basınca takip edip etmediğine bakılır
+        title = page["title"] if page else (settings.get("general_title") or "Likya Studios")
+        dm_ok = await send_private_reply_card(comment_id, build_gate_card(title, card_image_url(settings),
+                                                                          str(media_id) if page else ""))
+        dm_kind, dm_reply = "gate", f"[Takip kontrolü] {title} → düğme bekleniyor"
+        if not dm_ok:
+            dm_ok = await send_private_reply(comment_id, GATE["ask_text"])
+            dm_reply = f"[Takip kontrolü] {GATE['ask_text']}"
+    elif fmt == "card":
         # Kart: başlık = video adı, açıklama = gönderiye özel DM metni ya da ortak kart açıklaması
         subtitle = card_text(page.get("dm_message", ""), 80) if page and page.get("dm_message") else             settings.get("card_subtitle") or CARD_DEFAULTS["card_subtitle"]
         card = build_card(page["title"] if page else (settings.get("general_title") or "Likya Studios"),
@@ -426,7 +479,7 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
         if dm_ok:
             dm_kind = "card"
             dm_reply = f"[Kart] {card['attachment']['payload']['elements'][0]['title']} — {subtitle} → {link}"
-    if not dm_ok:
+    if not dm_ok and dm_kind != "gate":
         # Kart gönderilemezse (veya düz metin seçiliyse) eski usul metin mesajı gider
         dm_ok = await send_private_reply(comment_id, dm_reply)
     status_tag = "✅" if (comment_ok and dm_ok) else ("⚠️" if (comment_ok or dm_ok) else "❌")
@@ -441,9 +494,67 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
     })
 
 
+async def deliver_link(sender_id: str, media_id: str, via: str) -> None:
+    """Takip kontrolünden sonra: takip ediyorsa linki gönderir, etmiyorsa takip etmesini ister."""
+    data = await STORE.load()
+    settings, page = data["settings"], data["pages"].get(str(media_id or ""))
+    if page and not page.get("is_active", True):
+        page = None
+    title = page["title"] if page else (settings.get("general_title") or "Likya Studios")
+    follows = await check_follows(sender_id)
+    if follows is None and via == "button":
+        # Meta takip bilgisini çoğu zaman ancak kişi bir mesaj yazınca veriyor
+        PENDING_LINKS[sender_id] = str(media_id or "")
+        ok, result, reply = await send_instagram_dm(sender_id, GATE["type_link"]), "Takip bilgisi yok, LİNK yazması istendi", GATE["type_link"]
+    elif follows is False:
+        PENDING_LINKS[sender_id] = str(media_id or "")
+        reply = GATE["not_following"].replace("{account}", IG_USERNAME)
+        ok = await send_dm_message(sender_id, {"attachment": {"type": "template", "payload": {
+            "template_type": "button", "text": reply,
+            "buttons": [{"type": "postback", "title": GATE["button"], "payload": f"LINK:{media_id or ''}"}]}}})
+        if not ok:
+            ok = await send_instagram_dm(sender_id, reply)
+        result = "Takip etmiyor ❌"
+    else:
+        # Takip ediyor ya da Meta bilgi vermedi (bu durumda kimseyi mağdur etmemek için link gider)
+        PENDING_LINKS.pop(sender_id, None)
+        link = page_url(page)
+        subtitle = card_text(page.get("dm_message", ""), 80) if page and page.get("dm_message") else \
+            settings.get("card_subtitle") or CARD_DEFAULTS["card_subtitle"]
+        card = build_card(title, subtitle, link, settings.get("card_button") or CARD_DEFAULTS["card_button"],
+                          card_image_url(settings))
+        ok = await send_dm_message(sender_id, card)
+        reply = f"[Kart] {title} → {link}"
+        if not ok:
+            reply = render_dm((page.get("dm_message") or "").strip() if page else settings.get("dm_template", ""),
+                              link, title)
+            ok = await send_instagram_dm(sender_id, reply)
+        result = "Takip ediyor ✅" if follows else "Takip bilgisi alınamadı, link gönderildi"
+    RECENT_LOGS.append({
+        "time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
+        "type": "TAKİP KONTROLÜ", "kind": "dm", "user": sender_id, "media_id": media_id,
+        "input": "Linki gönder düğmesi" if via == "button" else "LİNK yazdı",
+        "reply": reply, "dm_reply": reply, "rule": f"{title} · {result}", "dm_ok": ok,
+        "follows": follows, "matched_rule": f"{title} · {result}",
+    })
+
+
+async def handle_postback(sender_id: str, payload: str) -> None:
+    if payload.startswith("LINK:"):
+        await deliver_link(sender_id, payload[5:], "button")
+
+
+def is_link_request(text: str) -> bool:
+    return re.sub(r"[^\wçğıöşü ]", "", (text or "").lower()).strip() in LINK_WORDS
+
+
 async def handle_dm(sender_id: str, text: str) -> None:
     data = await STORE.load()
     settings = data["settings"]
+    if settings.get("follow_gate") and (sender_id in PENDING_LINKS or is_link_request(text)):
+        if is_link_request(text):
+            await deliver_link(sender_id, PENDING_LINKS.get(sender_id, ""), "text")
+            return
     index_link = public_base()
     if GEMINI_API_KEY:
         try:
@@ -678,7 +789,7 @@ async def delete_page_api(media_id: str, request: Request):
 async def get_settings_api(request: Request):
     require_admin(request)
     s = (await STORE.load())["settings"]
-    return {**CARD_DEFAULTS, **s, "ai_prompt": s.get("ai_prompt") or load_file_prompt(), "card_image": card_image_url(s)}
+    return {**CARD_DEFAULTS, **s, "follow_gate": "on" if s.get("follow_gate") else "off", "ai_prompt": s.get("ai_prompt") or load_file_prompt(), "card_image": card_image_url(s)}
 
 
 @app.post("/api/settings")
@@ -703,6 +814,7 @@ async def save_settings_api(request: Request):
         "dm_format": "text" if raw.get("dm_format") == "text" else "card",
         "card_subtitle": str(raw.get("card_subtitle") or "").strip()[:80] or CARD_DEFAULTS["card_subtitle"],
         "card_button": str(raw.get("card_button") or "").strip()[:20] or CARD_DEFAULTS["card_button"],
+        "follow_gate": str(raw.get("follow_gate", "")).lower() in ("1", "true", "on"),
     })
     try:
         await STORE.save(data)
@@ -757,6 +869,11 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
             if mid and mid not in SEEN_EVENT_IDS and text and not message.get("is_echo") and str(sender_id) != IG_ACCOUNT_ID:
                 SEEN_EVENT_IDS.append(mid)
                 background.add_task(handle_dm, sender_id, text)
+            postback = msg_event.get("postback") or {}
+            pb_id = postback.get("mid") or f"pb:{sender_id}:{msg_event.get('timestamp')}"
+            if postback.get("payload") and pb_id not in SEEN_EVENT_IDS and str(sender_id) != IG_ACCOUNT_ID:
+                SEEN_EVENT_IDS.append(pb_id)
+                background.add_task(handle_postback, sender_id, str(postback["payload"]))
 
         comment_candidates = [c.get("value", {}) for c in entry.get("changes", []) if c.get("field") == "comments"]
         if entry.get("field") == "comments":

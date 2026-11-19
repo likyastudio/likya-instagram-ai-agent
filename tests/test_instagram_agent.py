@@ -557,3 +557,82 @@ def test_card_uses_custom_texts_and_limits(outbox, cards):
 def test_card_text_strips_links():
     assert ig.card_text("Merhaba! İşte: {link}  https://x.com/a", 80) == "Merhaba! İşte:"
     assert ig.card_text("a" * 100, 20).endswith("…") and len(ig.card_text("a" * 100, 20)) == 20
+
+
+# ---------------------------------------------------------------- Takip kontrollü link
+
+@pytest.fixture
+def gate(monkeypatch, outbox, cards):
+    client.post("/api/settings", headers=PIN, json={"public_reply": "ok", "dm_template": "x {link}", "follow_gate": "on"})
+    sent = []
+
+    async def dm_message(rid, message):
+        sent.append((rid, message)); return True
+    monkeypatch.setattr(ig, "send_dm_message", dm_message)
+    state = {"follows": True}
+
+    async def follows(igsid):
+        return state["follows"]
+    monkeypatch.setattr(ig, "check_follows", follows)
+    ig.PENDING_LINKS.clear()
+    return {"sent": sent, "state": state, "outbox": outbox, "cards": cards}
+
+
+def postback(sender="s1", payload="LINK:18121864655327295", mid="pb1"):
+    raw, headers = signed({"object": "instagram", "entry": [{"id": "1", "time": 1, "messaging": [
+        {"sender": {"id": sender}, "recipient": {"id": "1"}, "timestamp": 1, "postback": {"mid": mid, "title": "Linki gönder", "payload": payload}}]}]})
+    assert client.post("/webhook", content=raw, headers=headers).status_code == 200
+
+
+def dm_text(text, sender="s1", mid="m1"):
+    raw, headers = signed({"object": "instagram", "entry": [{"id": "1", "time": 1, "messaging": [
+        {"sender": {"id": sender}, "recipient": {"id": "1"}, "message": {"mid": mid, "text": text}}]}]})
+    assert client.post("/webhook", content=raw, headers=headers).status_code == 200
+
+
+def test_settings_follow_gate_round_trip():
+    assert client.get("/api/settings", headers=PIN).json()["follow_gate"] == "off"
+    client.post("/api/settings", headers=PIN, json={"public_reply": "ok", "dm_template": "x {link}", "follow_gate": "on"})
+    assert client.get("/api/settings", headers=PIN).json()["follow_gate"] == "on"
+
+
+def test_gate_comment_sends_button_not_link(gate):
+    post_comment()
+    el = gate["cards"][0][1]["attachment"]["payload"]["elements"][0]
+    assert el["buttons"][0] == {"type": "postback", "title": "Linki gönder", "payload": "LINK:18121864655327295"}
+    assert "default_action" not in el and "/orgu-yemek" not in json.dumps(gate["cards"])
+    assert gate["outbox"]["private"] == []
+
+
+def test_gate_follower_gets_link(gate):
+    postback()
+    el = gate["sent"][0][1]["attachment"]["payload"]["elements"][0]
+    assert gate["sent"][0][0] == "s1" and el["buttons"][0]["url"] == f"{BASE}/orgu-yemek"
+
+
+def test_gate_non_follower_is_asked_to_follow(gate):
+    gate["state"]["follows"] = False
+    postback()
+    msg = gate["sent"][0][1]["attachment"]["payload"]
+    assert msg["template_type"] == "button" and "@likyastudios" in msg["text"] and "/orgu-yemek" not in json.dumps(msg)
+    gate["state"]["follows"] = True
+    postback(mid="pb2")
+    assert gate["sent"][1][1]["attachment"]["payload"]["elements"][0]["buttons"][0]["url"] == f"{BASE}/orgu-yemek"
+
+
+def test_gate_unknown_asks_for_text_then_sends_link(gate):
+    gate["state"]["follows"] = None
+    postback()
+    assert gate["outbox"]["dms"][0] == ("s1", ig.GATE["type_link"]) and gate["sent"] == []
+    dm_text("LİNK")
+    assert gate["sent"][0][1]["attachment"]["payload"]["elements"][0]["buttons"][0]["url"] == f"{BASE}/orgu-yemek"
+
+
+def test_gate_off_link_word_goes_to_normal_dm(outbox, monkeypatch):
+    called = []
+
+    async def deliver(*a):
+        called.append(a)
+    monkeypatch.setattr(ig, "deliver_link", deliver)
+    dm_text("link")
+    assert called == [] and outbox["dms"]

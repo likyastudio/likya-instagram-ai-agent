@@ -44,13 +44,16 @@ def keywords(draft: dict) -> list[str]:
     return words
 
 
-def caption_matches(draft: dict, caption: str) -> bool:
+def match_score(draft: dict, caption: str) -> int:
+    """Açıklamada geçen ayırt edici kelime sayısı (0 = eşleşme yok)."""
     cap = fold(caption)
     squashed = cap.replace(" ", "")
-    for kw in keywords(draft):
-        if re.search(rf"\b{re.escape(kw)}", cap) or (len(kw) >= 8 and kw in squashed):
-            return True
-    return False
+    return sum(1 for kw in keywords(draft)
+               if re.search(rf"\b{re.escape(kw)}", cap) or (len(kw) >= 8 and kw in squashed))
+
+
+def caption_matches(draft: dict, caption: str) -> bool:
+    return match_score(draft, caption) > 0
 
 
 def _parse_date(value: str) -> datetime | None:
@@ -68,20 +71,31 @@ def find_bindings(drafts: dict[str, dict], posts: list[dict], bound_ids: set[str
 
     - Gönderinin zaten sayfası varsa atlanır.
     - Gönderi, taslak tarihinden en fazla 3 gün önce paylaşılmış olamaz (eski videolar karışmasın).
-    - Bir gönderiye birden fazla taslak uyuyorsa veya bir taslak birden fazla gönderiye uyuyorsa bağlanmaz.
+    - Bir gönderiye birden fazla taslak uyuyorsa en çok kelimesi tutan alınır; eşitse bağlanmaz.
+    - Bir taslak birden fazla gönderiye uyuyorsa bağlanmaz.
     """
+    # Bir gönderiye birden fazla taslak uyarsa en çok kelimesi tutan seçilir (ör. iki "Claude" videosu
+    # sıradayken "Claude + Codex + görsel" geçen açıklama Codex taslağına gider); eşitlik varsa bağlanmaz.
     candidates: dict[str, list[str]] = {}
     for post in posts:
         mid = str(post.get("id"))
         if not mid or mid in bound_ids:
             continue
         posted = _parse_date(post.get("timestamp", ""))
+        caption = post.get("caption") or post.get("title") or ""
+        scored: list[tuple[int, str]] = []
         for slug, draft in drafts.items():
             ddate = _parse_date(draft.get("date", ""))
             if posted and ddate and posted < ddate - timedelta(days=3):
                 continue
-            if caption_matches(draft, post.get("caption") or post.get("title") or ""):
-                candidates.setdefault(mid, []).append(slug)
+            score = match_score(draft, caption)
+            if score:
+                scored.append((score, slug))
+        scored.sort(reverse=True)
+        if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+            candidates[mid] = [scored[0][1]]
+        elif scored:
+            candidates[mid] = [s for _, s in scored]   # belirsiz: aşağıda elenir
     result: dict[str, str] = {}
     slug_hits: dict[str, int] = {}
     for slugs in candidates.values():

@@ -418,6 +418,18 @@ def test_ambiguous_or_old_posts_are_not_bound():
     assert video_import.find_bindings({"markitdown": p}, [media("4", "MarkItDown")], {"4"}) == {}
 
 
+def test_best_matching_draft_wins_when_two_drafts_share_a_word():
+    # 25.11.2026: iki "Claude" taslağı sıradayken 034'ün gönderisi hiçbirine bağlanmamıştı
+    codex = {"slug": "claude-codex-gorsel", "title": "Claude görsel üretemez, Codex'e ürettirir", "date": "2026-11-24"}
+    reels = {"slug": "claude-reels-atolyesi", "title": "Claude Code ile Reels atölyesi", "date": "2026-11-24"}
+    post = media("9", "Claude fotoğraf gibi tek bir görsel bile üretemez. OpenAI'ın Claude Code için resmi Codex eklentisiyle",
+                 ts="2026-11-25T03:03:00+0000")
+    drafts = {"claude-codex-gorsel": codex, "claude-reels-atolyesi": reels}
+    assert video_import.find_bindings(drafts, [post], set()) == {"9": "claude-codex-gorsel"}
+    tie = media("10", "Claude ile yeni video", ts="2026-11-25T03:03:00+0000")
+    assert video_import.find_bindings(drafts, [tie], set()) == {}   # eşitlik: elle bağlanır
+
+
 def test_draft_page_is_public_before_video_is_posted():
     add_draft(markitdown_page())
     r = client.get("/p/markitdown")

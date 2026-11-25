@@ -430,6 +430,20 @@ def test_best_matching_draft_wins_when_two_drafts_share_a_word():
     assert video_import.find_bindings(drafts, [tie], set()) == {}   # eşitlik: elle bağlanır
 
 
+def test_publish_time_decides_between_equal_drafts():
+    # Kelimeler eşit tutsa bile, sitede açılış saati paylaşım saatine uyan taslak seçilir
+    a = {"slug": "claude-codex-gorsel", "title": "Claude görsel", "date": "2026-11-24", "publish_at": "2026-11-25"}
+    b = {"slug": "claude-reels-atolyesi", "title": "Claude atölye", "date": "2026-11-24",
+         "publish_at": "2026-11-26T06:04:00+03:00"}
+    drafts = {"claude-codex-gorsel": a, "claude-reels-atolyesi": b}
+    post_25 = media("11", "Claude ile yeni video", ts="2026-11-25T03:03:00+0000")   # 25.11 06:03 TR
+    post_26 = media("12", "Claude ile yeni video", ts="2026-11-26T03:05:00+0000")   # 26.11 06:05 TR
+    assert video_import.find_bindings(drafts, [post_25], set()) == {"11": "claude-codex-gorsel"}
+    assert video_import.find_bindings(drafts, [post_26], set()) == {"12": "claude-reels-atolyesi"}
+    page = video_import.page_from_video_json({"slug": "x-y", "title": "X", "blocks": [], "publishAt": "2026-11-25"})
+    assert page["publish_at"] == "2026-11-25"
+
+
 def test_draft_page_is_public_before_video_is_posted():
     add_draft(markitdown_page())
     r = client.get("/p/markitdown")

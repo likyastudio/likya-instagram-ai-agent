@@ -66,12 +66,32 @@ def _parse_date(value: str) -> datetime | None:
     return None
 
 
+def _publish_moment(value: str) -> datetime | None:
+    """publishAt → UTC (saatsiz tarih: İstanbul 06:00, sitedeki varsayılanla aynı)."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        if "T" not in value:
+            return datetime.strptime(value[:10], "%Y-%m-%d") + timedelta(hours=3)   # 06:00 TR = 03:00 UTC
+        d = datetime.fromisoformat(value)
+        return (d - d.utcoffset()).replace(tzinfo=None) if d.utcoffset() is not None else d
+    except ValueError:
+        return None
+
+
+def _near(publish_at: str, posted: datetime, hours: int = 6) -> bool:
+    moment = _publish_moment(publish_at)
+    return bool(moment) and abs((posted - moment).total_seconds()) <= hours * 3600
+
+
 def find_bindings(drafts: dict[str, dict], posts: list[dict], bound_ids: set[str]) -> dict[str, str]:
     """{media_id: draft_slug} — yalnızca tek ve kesin eşleşmeler.
 
     - Gönderinin zaten sayfası varsa atlanır.
     - Gönderi, taslak tarihinden en fazla 3 gün önce paylaşılmış olamaz (eski videolar karışmasın).
-    - Bir gönderiye birden fazla taslak uyuyorsa en çok kelimesi tutan alınır; eşitse bağlanmaz.
+    - Bir gönderiye birden fazla taslak uyuyorsa önce planlanan açılış saati (publishAt) paylaşım saatine
+      ±6 saat uyan, sonra en çok kelimesi tutan alınır; eşitse bağlanmaz.
     - Bir taslak birden fazla gönderiye uyuyorsa bağlanmaz.
     """
     # Bir gönderiye birden fazla taslak uyarsa en çok kelimesi tutan seçilir (ör. iki "Claude" videosu
@@ -89,6 +109,8 @@ def find_bindings(drafts: dict[str, dict], posts: list[dict], bound_ids: set[str
             if posted and ddate and posted < ddate - timedelta(days=3):
                 continue
             score = match_score(draft, caption)
+            if score and posted and _near(draft.get("publish_at", ""), posted):
+                score += 100   # sayfanın planlanan açılış saati paylaşım saatine uyuyor: en güçlü işaret
             if score:
                 scored.append((score, slug))
         scored.sort(reverse=True)
@@ -139,4 +161,5 @@ def page_from_video_json(d: dict) -> dict:
         "title": title, "slug": slug, "body": "\n\n".join(body), "links": links, "prompts": prompts,
         "steps": steps, "tip": " ".join(tips), "external_url": "", "dm_message": "", "is_active": True,
         "number": d.get("number"), "date": str(d.get("date") or ""),
+        "publish_at": str(d.get("publishAt") or ""),
     }

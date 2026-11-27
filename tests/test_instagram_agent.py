@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 import app as ig
 import auth
 import public_pages
+import site_pages
 from app import app, valid_signature
 from store import DataStore
 
@@ -30,7 +31,14 @@ def isolated(tmp_path, monkeypatch):
     ig.RECENT_LOGS.clear()
     ig.SEEN_EVENT_IDS.clear()
     ig.MEDIA_CACHE.update(at=0.0, items=[])
+    set_site(monkeypatch, [])          # testler siteye bağlanmaz
     yield
+
+
+def set_site(monkeypatch, pages):
+    async def fake(fresh=False):
+        return pages
+    monkeypatch.setattr(site_pages, "fetch_site_pages", fake)
 
 
 def signed(payload: dict) -> tuple[bytes, dict]:
@@ -583,3 +591,58 @@ def test_card_uses_custom_texts_and_limits(outbox, cards):
 def test_card_text_strips_links():
     assert ig.card_text("Merhaba! İşte: {link}  https://x.com/a", 80) == "Merhaba! İşte:"
     assert ig.card_text("a" * 100, 20).endswith("…") and len(ig.card_text("a" * 100, 20)) == 20
+
+
+# ---------------------------------------------------------------- Sitedeki sayfalarla yorum kelimesi eşleştirme
+
+def site(n, slug, word, date="2026-11-24"):
+    return {"number": n, "slug": slug, "commentWord": word, "title": slug.replace("-", " ").title(), "date": date,
+            "publishAt": None, "live": True, "url": f"https://likyastudios.live/prompt/{slug}"}
+
+
+SITE = [site(34, "claude-codex-gorsel", "GÖRSEL"), site(35, "claude-reels-atolyesi", "ATÖLYE"),
+        site(36, "claude-animasyon-skilleri", "SAHNE", "2026-11-25"), site(38, "aile-dolandiricilik", "AİLE", "2026-11-26")]
+
+
+def test_caption_comment_word_is_found_in_many_spellings():
+    assert site_pages.caption_word("Üç komutun tamamı için yoruma GÖRSEL yaz, DM'den göndereyim.") == "gorsel"
+    assert site_pages.caption_word("Yorumlara “SAHNE” yaz 👇") == "sahne"
+    assert site_pages.caption_word("yorum olarak AİLE yaz") == "aile"
+    assert site_pages.caption_word("Sen ne düşünüyorsun? Yorum yaz!") == ""
+
+
+def test_each_claude_video_binds_to_its_own_page_by_comment_word():
+    # 25-27.11.2026: üç "Claude" videosu üst üste; açıklamalarda kelimeler GÖRSEL, ATÖLYE, SAHNE
+    posts = [media("a", "Claude görsel üretemez… Üç komut için yoruma GÖRSEL yaz", ts="2026-11-25T03:03:00+0000"),
+             media("b", "Kamera yok, kurgu yok. Claude Code… Adımlar için yoruma ATÖLYE yaz", ts="2026-11-26T03:04:00+0000"),
+             media("c", "Claude ile video yapıyorsan 5 ücretsiz eklenti. Liste için yoruma SAHNE yaz", ts="2026-11-27T03:05:00+0000")]
+    got = site_pages.find_site_bindings(SITE, posts, {})
+    assert {k: v["slug"] for k, v in got.items()} == {
+        "a": "claude-codex-gorsel", "b": "claude-reels-atolyesi", "c": "claude-animasyon-skilleri"}
+    # zaten bağlı gönderi ya da başka gönderiye bağlı sayfa tekrar bağlanmaz
+    bound = {"a": {"slug": "claude-codex-gorsel", "external_url": "https://likyastudios.live/prompt/claude-codex-gorsel"}}
+    assert set(site_pages.find_site_bindings(SITE, posts, bound)) == {"b", "c"}
+    # eski bir videoda aynı kelime geçse bile bağlanmaz
+    old = [media("z", "Eski video: yoruma SAHNE yaz", ts="2026-10-01T10:00:00+0000")]
+    assert site_pages.find_site_bindings(SITE, old, {}) == {}
+
+
+def test_new_post_comment_gets_its_own_site_page(outbox, monkeypatch):
+    set_site(monkeypatch, SITE)
+    set_media(monkeypatch, [media("777", "Claude ile video yapıyorsan… yoruma SAHNE yaz", ts="2026-11-27T03:05:00+0000")])
+    post_comment(media="777", text="SAHNE")
+    assert "https://likyastudios.live/prompt/claude-animasyon-skilleri" in outbox["private"][0][1]
+    r = client.get("/api/posts", headers=PIN).json()
+    bound = next(p for p in r["posts"] if p["id"] == "777")["page"]
+    assert bound["slug"] == "claude-animasyon-skilleri" and bound["bound_by"] == "yorum kelimesi"
+
+
+def test_comment_word_binds_when_caption_has_no_phrase(outbox, monkeypatch):
+    set_site(monkeypatch, SITE)
+    set_media(monkeypatch, [media("888", "Büyüklerine dolandırıcılığı anlat 👵", ts="2026-11-27T03:05:00+0000")])
+    post_comment(media="888", text="aile")
+    assert "https://likyastudios.live/prompt/aile-dolandiricilik" in outbox["private"][0][1]
+    # aynı sayfa ikinci bir gönderiye yorumla bağlanmaz
+    set_media(monkeypatch, [media("889", "Başka video", ts="2026-11-27T05:00:00+0000")])
+    post_comment(cid="c2", media="889", text="AİLE")
+    assert "aile-dolandiricilik" not in outbox["private"][1][1]

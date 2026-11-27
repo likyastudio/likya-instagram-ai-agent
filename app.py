@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 
 import auth
 import public_pages
+import site_pages
 import video_import
 from store import DataStore
 
@@ -268,7 +269,7 @@ async def fetch_instagram_media(limit: int = 30, fresh: bool = False) -> list[di
                 result.append({
                     "id": str(item.get("id")),
                     "title": (caption.split("\n")[0][:90] or "Başlıksız gönderi"),
-                    "caption": caption[:600],
+                    "caption": caption[:2200],
                     "media_type": mtype,
                     "permalink": item.get("permalink", ""),
                     "timestamp": item.get("timestamp", ""),
@@ -355,36 +356,73 @@ async def send_private_reply_card(comment_id: str, card: dict) -> bool:
 
 # ---------------------------------------------------------------- Taslakların gönderilere otomatik bağlanması
 
-async def auto_bind_drafts(media: list[dict]) -> list[tuple[str, str]]:
-    """Yeni gönderileri, açıklamasında adı geçen hazır taslakla eşleştirip sayfayı o gönderiye bağlar."""
-    data = await STORE.load()
-    if not data.get("drafts") or not media:
-        return []
-    bindings = video_import.find_bindings(data["drafts"], media, set(data["pages"]))
+def _log_binding(mid: str, slug: str, how: str) -> None:
+    logger.info(f"'{slug}' sayfası gönderiye ({mid}) otomatik bağlandı ({how}).")
+    RECENT_LOGS.append({"time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
+                        "type": "SİSTEM", "kind": "system", "user": "Otomatik eşleştirme",
+                        "input": f"Yeni gönderi {mid}", "reply": f"“{slug}” sayfası bu gönderiye bağlandı ({how}).",
+                        "rule": slug, "matched_rule": slug})
+
+
+async def _bind_site_pages(bindings: dict[str, dict], how: str) -> list[tuple[str, str]]:
+    """Site sayfalarını gönderilere bağlar; aynı adlı bekleyen taslak varsa içeriğiyle birlikte."""
     if not bindings:
         return []
-    data = await STORE.load(force=True)            # kaydetmeden önce en güncel hali al
+    data = await STORE.load(force=True)
     done = []
+    for mid, sp in bindings.items():
+        if mid in data["pages"] or site_pages._used(sp, data["pages"]):
+            continue
+        page = site_pages.to_panel_page(sp, data.get("drafts", {}).pop(sp["slug"], None))
+        page.update(auto_bound=True, bound_at=_now_iso(), bound_by=how)
+        data["pages"][mid] = page
+        done.append((mid, sp["slug"]))
+    if done:
+        try:
+            await STORE.save(data)
+        except Exception as e:
+            logger.error(f"Otomatik bağlama kaydedilemedi: {e}")
+            return []
+        for mid, slug in done:
+            _log_binding(mid, slug, how)
+    return done
+
+
+async def auto_bind_drafts(media: list[dict]) -> list[tuple[str, str]]:
+    """Yeni gönderileri sayfalarına bağlar.
+
+    1) Açıklamadaki "yoruma KELİME yaz" kelimesi sitedeki bir sayfanın kelimesiyse o sayfa (en kesin yol).
+    2) Kalanlar için paneldeki hazır taslaklar (açılış saati ve açıklamadaki kelimelerle).
+    """
+    if not media:
+        return []
+    data = await STORE.load()
+    done = await _bind_site_pages(
+        site_pages.find_site_bindings(await site_pages.fetch_site_pages(), media, data["pages"]), "yorum kelimesi")
+    data = await STORE.load(force=bool(done))
+    if not data.get("drafts"):
+        return done
+    bindings = video_import.find_bindings(data["drafts"], media, set(data["pages"]))
+    if not bindings:
+        return done
+    data = await STORE.load(force=True)            # kaydetmeden önce en güncel hali al
+    drafted = []
     for mid, slug in bindings.items():
         draft = data["drafts"].pop(slug, None)
         if not draft or mid in data["pages"]:
             continue
         draft.update(auto_bound=True, bound_at=_now_iso())
         data["pages"][mid] = draft
-        done.append((mid, slug))
-    if done:
+        drafted.append((mid, slug))
+    if drafted:
         try:
             await STORE.save(data)
-            for mid, slug in done:
-                logger.info(f"Taslak '{slug}' gönderiye ({mid}) otomatik bağlandı.")
-                RECENT_LOGS.append({"time": datetime.now(timezone.utc).strftime("%H:%M:%S"), "at": _now_iso(),
-                                    "type": "SİSTEM", "kind": "system", "user": "Otomatik eşleştirme",
-                                    "input": f"Yeni gönderi {mid}", "reply": f"“{slug}” sayfası bu gönderiye bağlandı.",
-                                    "rule": slug, "matched_rule": slug})
         except Exception as e:
             logger.error(f"Otomatik bağlama kaydedilemedi: {e}")
-            return []
-    return done
+            return done
+        for mid, slug in drafted:
+            _log_binding(mid, slug, "taslak")
+    return done + drafted
 
 
 # ---------------------------------------------------------------- İşleyiciler
@@ -393,10 +431,18 @@ async def handle_comment(comment_id: str, text: str, username: str = "", media_i
     data = await STORE.load()
     settings, pages = data["settings"], data["pages"]
     page = pages.get(str(media_id))
-    if page is None and media_id and data.get("drafts"):
-        # Yeni videoya ilk yorum: gönderi listesini tazeleyip hazır taslakla eşleştirmeyi dene
+    if page is None and media_id:
+        # Yeni videoya ilk yorum: gönderi listesini tazeleyip sitedeki sayfa / hazır taslakla eşleştirmeyi dene
         known = any(m["id"] == str(media_id) for m in MEDIA_CACHE["items"])
-        if await auto_bind_drafts(await fetch_instagram_media(fresh=not known)):
+        media = await fetch_instagram_media(fresh=not known)
+        bound = await auto_bind_drafts(media)
+        if not any(mid == str(media_id) for mid, _ in bound):
+            # Açıklamada kelime yoksa yorumun kendisi ("SAHNE") sayfayı gösterebilir
+            post = next((m for m in media if m["id"] == str(media_id)), None)
+            sp = site_pages.page_for_comment(await site_pages.fetch_site_pages(), text, post, pages)
+            if sp:
+                bound = await _bind_site_pages({str(media_id): sp}, "yorumdaki kelime")
+        if bound:
             data = await STORE.load()
             settings, pages = data["settings"], data["pages"]
             page = pages.get(str(media_id))

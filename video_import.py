@@ -44,13 +44,16 @@ def keywords(draft: dict) -> list[str]:
     return words
 
 
-def caption_matches(draft: dict, caption: str) -> bool:
+def match_score(draft: dict, caption: str) -> int:
+    """Açıklamada geçen ayırt edici kelime sayısı (0 = eşleşme yok)."""
     cap = fold(caption)
     squashed = cap.replace(" ", "")
-    for kw in keywords(draft):
-        if re.search(rf"\b{re.escape(kw)}", cap) or (len(kw) >= 8 and kw in squashed):
-            return True
-    return False
+    return sum(1 for kw in keywords(draft)
+               if re.search(rf"\b{re.escape(kw)}", cap) or (len(kw) >= 8 and kw in squashed))
+
+
+def caption_matches(draft: dict, caption: str) -> bool:
+    return match_score(draft, caption) > 0
 
 
 def _parse_date(value: str) -> datetime | None:
@@ -63,25 +66,58 @@ def _parse_date(value: str) -> datetime | None:
     return None
 
 
+def _publish_moment(value: str) -> datetime | None:
+    """publishAt → UTC (saatsiz tarih: İstanbul 06:00, sitedeki varsayılanla aynı)."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        if "T" not in value:
+            return datetime.strptime(value[:10], "%Y-%m-%d") + timedelta(hours=3)   # 06:00 TR = 03:00 UTC
+        d = datetime.fromisoformat(value)
+        return (d - d.utcoffset()).replace(tzinfo=None) if d.utcoffset() is not None else d
+    except ValueError:
+        return None
+
+
+def _near(publish_at: str, posted: datetime, hours: int = 6) -> bool:
+    moment = _publish_moment(publish_at)
+    return bool(moment) and abs((posted - moment).total_seconds()) <= hours * 3600
+
+
 def find_bindings(drafts: dict[str, dict], posts: list[dict], bound_ids: set[str]) -> dict[str, str]:
     """{media_id: draft_slug} — yalnızca tek ve kesin eşleşmeler.
 
     - Gönderinin zaten sayfası varsa atlanır.
     - Gönderi, taslak tarihinden en fazla 3 gün önce paylaşılmış olamaz (eski videolar karışmasın).
-    - Bir gönderiye birden fazla taslak uyuyorsa veya bir taslak birden fazla gönderiye uyuyorsa bağlanmaz.
+    - Bir gönderiye birden fazla taslak uyuyorsa önce planlanan açılış saati (publishAt) paylaşım saatine
+      ±6 saat uyan, sonra en çok kelimesi tutan alınır; eşitse bağlanmaz.
+    - Bir taslak birden fazla gönderiye uyuyorsa bağlanmaz.
     """
+    # Bir gönderiye birden fazla taslak uyarsa en çok kelimesi tutan seçilir (ör. iki "Claude" videosu
+    # sıradayken "Claude + Codex + görsel" geçen açıklama Codex taslağına gider); eşitlik varsa bağlanmaz.
     candidates: dict[str, list[str]] = {}
     for post in posts:
         mid = str(post.get("id"))
         if not mid or mid in bound_ids:
             continue
         posted = _parse_date(post.get("timestamp", ""))
+        caption = post.get("caption") or post.get("title") or ""
+        scored: list[tuple[int, str]] = []
         for slug, draft in drafts.items():
             ddate = _parse_date(draft.get("date", ""))
             if posted and ddate and posted < ddate - timedelta(days=3):
                 continue
-            if caption_matches(draft, post.get("caption") or post.get("title") or ""):
-                candidates.setdefault(mid, []).append(slug)
+            score = match_score(draft, caption)
+            if score and posted and _near(draft.get("publish_at", ""), posted):
+                score += 100   # sayfanın planlanan açılış saati paylaşım saatine uyuyor: en güçlü işaret
+            if score:
+                scored.append((score, slug))
+        scored.sort(reverse=True)
+        if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+            candidates[mid] = [scored[0][1]]
+        elif scored:
+            candidates[mid] = [s for _, s in scored]   # belirsiz: aşağıda elenir
     result: dict[str, str] = {}
     slug_hits: dict[str, int] = {}
     for slugs in candidates.values():
@@ -125,4 +161,5 @@ def page_from_video_json(d: dict) -> dict:
         "title": title, "slug": slug, "body": "\n\n".join(body), "links": links, "prompts": prompts,
         "steps": steps, "tip": " ".join(tips), "external_url": "", "dm_message": "", "is_active": True,
         "number": d.get("number"), "date": str(d.get("date") or ""),
+        "publish_at": str(d.get("publishAt") or ""),
     }
